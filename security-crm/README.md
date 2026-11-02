@@ -16,24 +16,109 @@ is checked against the signed-in role.
 No framework, no build step, no Composer — plain PHP 8, PDO/MySQL, one CSS
 file and one JS file. Drop it into Laragon and go.
 
-## Run it (Laragon)
+## Run it in Laragon (step by step)
 
-1. Copy this folder to `C:\laragon\www\secops-crm` (any folder under `www` works).
-2. Start **Apache** and **MySQL** in Laragon.
-3. Open <http://secops-crm.local> (or `http://localhost/secops-crm`) and sign in.
+Anything from Laragon 4 up works: **Apache 2.4** + **MySQL 8 / MariaDB** +
+**PHP 8.1 or newer**. No Composer, no Node, no `ext-zip`.
 
-That's it: on the first request the app creates the `security_crm` database,
-all eleven tables and seeds them with sample data — plus the demo accounts below.
+### 1. Copy the app into `www`
 
-> No Apache? From this folder run `php -S localhost:8000 router.php`.
-> `router.php` applies the same denies as `.htaccess`, so `schema.sql`,
-> `README.md`, `lib/`, `tests/`, `logs/` and `uploads/` stay private.
+The PHP app lives in the **`security-crm`** folder of this repository — the repo
+root holds an unrelated starter front end, so copy only that folder. Menu →
+**www** opens Laragon's web root; you should end up with:
 
-Connection settings live in `config.php` — Laragon's default `root` with an
-empty password is already set.
+```
+C:\laragon\www\security-crm\index.php
+C:\laragon\www\security-crm\config.php
+C:\laragon\www\security-crm\views\
+```
 
-> Want a manual import instead? The schema lives in `schema.sql`. The app
-> still seeds any empty table on the next request.
+You can rename it (`secops`, `crm-is`, …) — nothing inside depends on the name.
+
+### 2. Start Apache and MySQL
+
+Laragon → **Start All**. Both dots must be green: Apache runs the PHP, MySQL
+holds the data.
+
+### 3. Open it in the browser
+
+- <http://localhost/security-crm/>
+- or, with *auto virtual hosts* on (Preferences → Services & Ports):
+  <http://security-crm.test/>
+
+Open a **URL**, not the folder — `file:///C:/laragon/www/...` never executes PHP.
+If the `.test` host answers 404, auto virtual hosts is off; the `localhost` URL
+above always works.
+
+### 4. Let the first request build the database
+
+Nothing to import. On the first page load the app connects as `root` (Laragon's
+default, empty password), creates the `security_crm` database and its **eleven
+tables**, then seeds sample data — SOPs, 12 issues, 12 templates, 10 EDLP
+exceptions — plus the four demo accounts below. The sign-in page appears once
+that second or two of setup finishes.
+
+Prefer phpMyAdmin? Import `schema.sql` first; the app still seeds any table that
+is empty.
+
+### 5. Sign in
+
+Use one of the accounts in the next section. Five wrong passwords lock that
+account for 15 minutes.
+
+### 6. The two Laragon settings worth checking
+
+| Setting | Why it matters | Where |
+| --- | --- | --- |
+| `AllowOverride All` on the `www` directory | `security-crm/.htaccess` denies `/uploads`, `/lib`, `/tests`, `*.sql` and `*.md`, and turns on gzip + asset caching. Without it Apache ignores the file and anyone can download `schema.sql`. | `C:\laragon\bin\apache\httpd.conf` → `<Directory "C:/laragon/www">` → `AllowOverride All`, restart Apache. **Check:** <http://localhost/security-crm/schema.sql> must answer 403/404, not the file. |
+| Upload size in `php.ini` | Evidence uploads are capped at the **effective** PHP limit — the smallest of `upload_max_filesize`, `post_max_size` and the app's 8 MB — and the issue page prints that real number. Laragon's default `2M` therefore means a 2 MB cap, not 8 MB. | Menu → PHP → **php.ini**: `upload_max_filesize = 8M`, `post_max_size = 16M`, then restart Apache. |
+
+Required extensions are `pdo_mysql`, `mbstring` and — for reliable evidence
+type checks — `fileinfo`; all three are enabled in Laragon by default.
+`mod_rewrite` is *not* needed: every URL is `index.php?page=…`.
+
+### 7. Point it at a real database account (recommended)
+
+`config.php` ships with Laragon's `root` / empty password. Either edit that file
+or set environment variables, which take precedence:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SECOPS_DB_HOST` | `127.0.0.1` | MySQL host |
+| `SECOPS_DB_PORT` | `3306` | MySQL port |
+| `SECOPS_DB_USER` | `root` | database user |
+| `SECOPS_DB_PASS` | *(empty)* | database password |
+| `SECOPS_DB_NAME` | `security_crm` | database name (created if missing) |
+| `SECOPS_DEMO` | `1` | `0` hides the demo accounts on the sign-in screen |
+
+On Apache, `SetEnv SECOPS_DB_USER secops` inside the vhost (or the folder's
+`.htaccess`) works; with the built-in server, prefix the command.
+
+### 8. Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `could not find driver` | `pdo_mysql` is off for the PHP version Apache runs — Menu → PHP → Extensions |
+| `SQLSTATE[HY000] [1045] Access denied` | MySQL is stopped, or `root` has a password → start MySQL / set `SECOPS_DB_PASS` |
+| `SQLSTATE[HY000] [2002] Connection refused` | wrong host or port → check `SECOPS_DB_HOST` / `SECOPS_DB_PORT` |
+| HTTP 500 or a blank page | read `security-crm/logs/app.log`; confirm PHP 8.1+ (Menu → PHP → Version) |
+| Unstyled page | wrong URL depth — the app must be at `/security-crm/index.php` so `assets/` resolves beside it |
+| `http://security-crm.test` → 404 | auto virtual hosts is off → use `http://localhost/security-crm/` |
+| `schema.sql` downloads in the browser | `AllowOverride` is not `All` (step 6) |
+| Upload refused below 8 MB | `php.ini` limits (step 6) — the page shows the cap it is enforcing |
+| Port 80 already in use | Laragon → Preferences → Port, or stop IIS / Skype |
+| Downloaded `.docx` is empty | whitespace or a BOM before `<?php` in a file you edited |
+
+### 9. No Apache?
+
+From inside the `security-crm` folder:
+
+```bash
+php -S localhost:8000 router.php
+```
+
+`router.php` applies the same denies as `.htaccess`, so `schema.sql`,
+`README.md`, `lib/`, `tests/`, `logs/` and `uploads/` stay private.
 
 ## Sign in
 
