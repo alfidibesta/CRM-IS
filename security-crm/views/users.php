@@ -149,6 +149,7 @@ $stats = [
         <summary class="btn btn--ghost btn--summary btn--sm">+ Add user</summary>
         <form class="form form--sub" method="post" action="index.php">
           <?= csrf_field() ?>
+          <?= once_field() ?>
           <input type="hidden" name="action" value="create_user">
           <input type="hidden" name="back" value="users">
           <div class="form__grid">

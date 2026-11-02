@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS issues (
     reviewed_at       DATE NULL,
     approved_by       VARCHAR(100) NOT NULL DEFAULT '',
     description       TEXT NULL,
+    tags              VARCHAR(255) NOT NULL DEFAULT '',
+    report_template_id INT NULL,
+    report_body       MEDIUMTEXT NULL,
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_issues_status (status),
@@ -103,6 +106,16 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until    DATETIME NULL,
     last_login      DATETIME NULL,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    username   VARCHAR(40) NOT NULL DEFAULT '',
+    ip         VARCHAR(45) NOT NULL DEFAULT '',
+    ok         TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_attempts_ip (ip, created_at),
+    INDEX idx_attempts_user (username, created_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS suspects (
@@ -160,6 +173,36 @@ CREATE TABLE IF NOT EXISTS templates (
     updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS exception_categories (
+    id    INT AUTO_INCREMENT PRIMARY KEY,
+    name  VARCHAR(60) NOT NULL UNIQUE,
+    tone  ENUM('red','blue','orange','green','neutral') NOT NULL DEFAULT 'neutral',
+    sort  INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS exceptions (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    code          VARCHAR(20)  NOT NULL UNIQUE,
+    title         VARCHAR(200) NOT NULL,
+    system        VARCHAR(40)  NOT NULL DEFAULT 'EDLP',
+    category      VARCHAR(60)  NOT NULL DEFAULT '',
+    target        VARCHAR(180) NOT NULL DEFAULT '',
+    detail        TEXT NULL,
+    justification TEXT NULL,
+    control       VARCHAR(255) NOT NULL DEFAULT '',
+    period_start  DATE NULL,
+    period_end    DATE NULL,
+    status        ENUM('Active','Pending','Revoked') NOT NULL DEFAULT 'Active',
+    risk_level    ENUM('High','Medium','Low') NOT NULL DEFAULT 'Medium',
+    owner         VARCHAR(100) NOT NULL DEFAULT '',
+    approved_by   VARCHAR(100) NOT NULL DEFAULT '',
+    ref_no        VARCHAR(40)  NOT NULL DEFAULT '',
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_exc_period (period_end),
+    INDEX idx_exc_status (status)
+) ENGINE=InnoDB;
 SQL;
 
     // One exec() per statement: multi-statement queries are not portable
@@ -184,6 +227,9 @@ SQL;
         'reviewed_at'       => 'DATE NULL',
         'approved_by'       => "VARCHAR(100) NOT NULL DEFAULT ''",
         'updated_at'        => 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+        'tags'              => "VARCHAR(255) NOT NULL DEFAULT ''",
+        'report_template_id' => 'INT NULL',
+        'report_body'       => 'MEDIUMTEXT NULL',
     ]);
     ensure_columns($pdo, 'sops', ['content' => 'TEXT NULL']);
 }
@@ -212,6 +258,8 @@ function seedIfEmpty(PDO $pdo): void
     seed_issues($pdo);
     seed_tasks($pdo);
     seed_templates($pdo);
+    seed_issue_extras($pdo);
+    seed_exceptions($pdo);
     seed_activity($pdo);
 }
 
@@ -463,6 +511,158 @@ function seed_templates(PDO $pdo): void
     $st = $pdo->prepare('INSERT INTO templates (code,name,category,version,owner,description,body,downloads) VALUES (?,?,?,?,?,?,?,0)');
     foreach ($tpl as $t) {
         $st->execute($t);
+    }
+}
+
+/**
+ * Tags and the linked report form for the seeded issues. Runs only while no
+ * issue carries either, so demo content never overwrites real edits.
+ */
+function seed_issue_extras(PDO $pdo): void
+{
+    $filled = (int) $pdo->query("SELECT COUNT(*) FROM issues WHERE tags <> '' OR report_template_id IS NOT NULL")->fetchColumn();
+    if ($filled > 0) {
+        return;
+    }
+
+    $idByCode = [];
+    foreach ($pdo->query('SELECT id, code FROM issues')->fetchAll() as $r) {
+        $idByCode[(string) $r['code']] = (int) $r['id'];
+    }
+    $tplByCode = [];
+    foreach ($pdo->query('SELECT id, code FROM templates')->fetchAll() as $r) {
+        $tplByCode[(string) $r['code']] = (int) $r['id'];
+    }
+
+    $rows = [
+        ['SEC-1001', 'door-control, after-hours, cctv', 'TPL-007'],
+        ['SEC-1002', 'tailgating, gate, logistics', 'TPL-007'],
+        ['SEC-1003', 'signage, warehouse', null],
+        ['SEC-1004', 'ot-network, segmentation, hmi', 'TPL-010'],
+        ['SEC-1005', 'shared-account, mes, audit-trail', 'TPL-007'],
+        ['SEC-1006', 'patching, endpoint, wsus', null],
+        ['SEC-1007', 'phishing, email, credential', 'TPL-007'],
+        ['SEC-1008', 'fatigue, roster, overtime', null],
+        ['SEC-1009', 'training, onboarding', 'TPL-012'],
+        ['SEC-1010', 'scada, change-control, deadline-pressure', 'TPL-009'],
+        ['SEC-1011', 'fire-door, warehouse, hold-open', null],
+        ['SEC-1012', 'shadow-it, saas, cad', 'TPL-010'],
+    ];
+
+    $st = $pdo->prepare('UPDATE issues SET tags = ?, report_template_id = ? WHERE id = ?');
+    foreach ($rows as [$code, $tags, $tpl]) {
+        if (!isset($idByCode[$code])) {
+            continue;
+        }
+        $st->execute([$tags, $tpl !== null ? ($tplByCode[$tpl] ?? null) : null, $idByCode[$code]]);
+    }
+}
+
+/* ------------------------------------------------------------- exceptions */
+
+function seed_exceptions(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM exception_categories')->fetchColumn() === 0) {
+        $cats = [
+            ['USB Storage', 'orange', 1],
+            ['Website Access', 'blue', 2],
+            ['Camera / CCTV', 'red', 3],
+            ['Removable Media', 'orange', 4],
+            ['Network Share', 'neutral', 5],
+            ['Cloud Application', 'blue', 6],
+            ['Device Allow-list', 'neutral', 7],
+        ];
+        $st = $pdo->prepare('INSERT INTO exception_categories (name, tone, sort) VALUES (?,?,?)');
+        foreach ($cats as $c) {
+            $st->execute($c);
+        }
+    }
+
+    if ((int) $pdo->query('SELECT COUNT(*) FROM exceptions')->fetchColumn() > 0) {
+        return;
+    }
+
+    // Periods are relative to today so the demo always shows one expiring and
+    // one already-expired exception.
+    $day = fn(int $offset): string => date('Y-m-d', (int) strtotime(($offset >= 0 ? '+' : '') . $offset . ' days'));
+
+    $rows = [
+        ['EXC-001', 'Line 3 label printer firmware USB', 'EDLP', 'USB Storage',
+            'USB-KNG-4GB-0117 (Kingston DataTraveler, serial 0117)',
+            "Issued to the Line 3 packaging team for firmware updates on the label printer.\nKept in the shift supervisor's locked drawer and signed out on the paper log.",
+            'The printer vendor publishes firmware only as a FAT32 USB image; the plant has no network path to the printer bootloader.',
+            'Scan on the standalone AV station before use; read-only mount; single named holder.',
+            $day(-120), $day(200), 'Active', 'Medium', 'B. Saputra', 'R. Hartono', 'EDLP-2025-001'],
+
+        ['EXC-002', 'Coating MSDS download from supplier portal', 'EDLP', 'Website Access',
+            'portal.kerta-materials.example (download only)',
+            "Engineering downloads safety data sheets for the new coating line.\nNo uploads, no account sharing; each download is logged by the proxy.",
+            'The supplier publishes revised MSDS only through its portal; paper copies were always out of date.',
+            'Proxy allow-list for the domain only, upload blocked, logs reviewed monthly.',
+            $day(-60), $day(25), 'Active', 'Medium', 'A. Pratama', 'R. Hartono', 'EDLP-2025-014'],
+
+        ['EXC-003', 'Camera 27 temporary sightline on the new dock', 'EDLP', 'Camera / CCTV',
+            'CAM-27 · dock D2 loading bay',
+            "Camera 27 was re-aimed to cover dock D2 while the permanent pole is installed.\nBlind spot remains on the west stair until the new mount is commissioned.",
+            'The old pole was removed with the warehouse extension; the new mount is on order.',
+            'Guard round R2 checks the west stair visually; recording retention kept at 30 days.',
+            $day(-30), $day(120), 'Active', 'Low', 'S. Wijaya', 'R. Hartono', 'EDLP-2025-021'],
+
+        ['EXC-004', 'Engineering laptop on the OT VLAN for commissioning', 'EDLP', 'Device Allow-list',
+            'ENG-LT-042 · 10.20.9.42',
+            "Commissioning laptop needs a fixed address on the OT segment for the Line 4 vision system.\nEndpoint protection, disk encryption and USB block are enforced; no office mail or browsing.",
+            'The vision vendor tool cannot run across the firewall; the work lasts until the line is handed over.',
+            'Host firewall limited to two OT hosts, patched weekly, disconnected when not commissioning.',
+            $day(-10), $day(14), 'Active', 'High', 'D. Kusuma', 'R. Hartono', 'EDLP-2025-026'],
+
+        ['EXC-005', 'Machine-vision backup USB for cell 4', 'EDLP', 'USB Storage',
+            'USB-SND-16GB-0090',
+            'Weekly recipe and calibration backup from cell 4 written to a USB stick.',
+            'The cell controller has no network backup path; vendor supports USB export only.',
+            'Dedicated media, scanned after each use, stored in the control room safe.',
+            $day(-400), $day(-10), 'Active', 'Medium', 'B. Saputra', 'R. Hartono', 'EDLP-2024-009'],
+
+        ['EXC-006', 'CAD viewer cloud trial for supplier drawings', 'EDLP', 'Cloud Application',
+            'viewer.cadcloud.example (30-day trial)',
+            "Engineering wants a browser viewer for supplier STEP files instead of installing the CAD suite.\nTen named users, no customer drawings, watermarked export disabled.",
+            'The CAD suite is licensed for four seats; twelve engineers need read-only viewing.',
+            'Trial tenant under review; data processing agreement and region check pending.',
+            $day(-2), $day(45), 'Pending', 'High', 'A. Pratama', '', 'EDLP-2025-031'],
+
+        ['EXC-007', 'External SharePoint link for the customer audit pack', 'EDLP', 'Network Share',
+            'sharepoint.example/sites/q4-audit (guest link)',
+            "Audit evidence pack shared with the customer quality team through a guest link.\nLink expires automatically and is limited to named recipients.",
+            'The customer has no access to the plant collaboration tenant and the audit is next week.',
+            'Guest link with expiry, download-only, reviewed when the audit closes.',
+            $day(-20), $day(90), 'Active', 'Medium', 'S. Wijaya', 'R. Hartono', 'EDLP-2025-029'],
+
+        ['EXC-008', 'Contractor camera for ceiling installation photos', 'EDLP', 'Camera / CCTV',
+            'Contractor phone, work order CO-2291',
+            'Electrical contractor photographs completed ceiling trays for the handover report.',
+            'The handover requires photo evidence; the contractor has no plant camera.',
+            'Escorted at all times, photos reviewed on site, no production lines in frame.',
+            $day(-5), $day(3), 'Active', 'High', 'S. Wijaya', 'R. Hartono', 'EDLP-2025-033'],
+
+        ['EXC-009', 'USB for MES terminal 4 badge-reader firmware', 'EDLP', 'Removable Media',
+            'USB-SND-8GB-0142',
+            'Badge reader firmware for MES terminal 4 is flashed from a vendor-supplied USB stick.',
+            'The reader has no network interface and the vendor only distributes signed images on USB.',
+            'Vendor signed image verified, media retained by IT after flashing.',
+            $day(-200), $day(130), 'Active', 'Low', 'D. Kusuma', 'R. Hartono', 'EDLP-2025-017'],
+
+        ['EXC-010', 'Legacy vendor remote support tool', 'EDLP', 'Cloud Application',
+            'support.legacy-oem.example',
+            'Old press OEM used a cloud remote-support agent for breakdowns.',
+            'Kept for the press warranty period; the press was replaced in Q3.',
+            'Agent uninstalled and the tenant closed after the press was decommissioned.',
+            $day(-300), $day(-45), 'Revoked', 'High', 'D. Kusuma', 'R. Hartono', 'EDLP-2024-022'],
+    ];
+
+    $st = $pdo->prepare('INSERT INTO exceptions
+        (code,title,system,category,target,detail,justification,control,period_start,period_end,status,risk_level,owner,approved_by,ref_no)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    foreach ($rows as $r) {
+        $st->execute($r);
     }
 }
 

@@ -6,7 +6,7 @@
   </div>
 </div>
 
-<script>window.CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;</script>
+<script nonce="<?= e(csp_nonce()) ?>">window.CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;</script>
 <script src="assets/app.js"></script>
 </body>
 </html>

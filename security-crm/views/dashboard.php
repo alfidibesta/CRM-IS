@@ -10,6 +10,9 @@ $statFiles  = (int) $pdo->query('SELECT COUNT(*) FROM issue_files')->fetchColumn
 $statPeople = (int) $pdo->query('SELECT COUNT(*) FROM suspects')->fetchColumn();
 $statTpl    = (int) $pdo->query('SELECT COUNT(*) FROM templates')->fetchColumn();
 $statUsers  = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE active = 1')->fetchColumn();
+$excActive  = (int) $pdo->query("SELECT COUNT(*) FROM exceptions WHERE status = 'Active'")->fetchColumn();
+$excSoon    = (int) $pdo->query("SELECT COUNT(*) FROM exceptions WHERE status = 'Active' AND period_end BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)")->fetchColumn();
+$excList    = $pdo->query("SELECT * FROM exceptions WHERE status <> 'Revoked' ORDER BY period_end ASC LIMIT 5")->fetchAll();
 
 $byCategory = $pdo->query("SELECT category,
         SUM(status <> 'Resolved') AS open,
@@ -73,6 +76,11 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
     <p class="stat__label">Form templates</p>
     <p class="stat__value"><?= $statTpl ?></p>
     <p class="stat__hint">NDA, agreements, forms</p>
+  </article>
+  <article class="card stat stat--orange">
+    <p class="stat__label">EDLP exceptions</p>
+    <p class="stat__value"><?= $excActive ?></p>
+    <p class="stat__hint"><?= $excSoon ?> expiring ≤ 30 days</p>
   </article>
   <article class="card stat stat--orange">
     <p class="stat__label">Accounts</p>
@@ -201,6 +209,46 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
     </tbody>
   </table>
 </section>
+
+<?php if (can('page.exceptions') && $excList): ?>
+<section class="card">
+  <header class="card__head">
+    <h2>EDLP exceptions expiring</h2>
+    <a class="link" href="?page=exceptions">Open register</a>
+  </header>
+  <table class="table table--tight">
+    <thead>
+      <tr><th>Exception</th><th>Category</th><th>Period</th><th>State</th><th>Owner</th></tr>
+    </thead>
+    <tbody>
+    <?php foreach ($excList as $e): ?>
+      <?php
+        [$stateLabel, $stateTone] = exception_state($e);
+        $days = exception_days_left($e['period_end'] ?? null);
+      ?>
+      <tr>
+        <td>
+          <span class="mono muted"><?= e($e['code']) ?></span>
+          <span class="strong"><?= e($e['title']) ?></span>
+          <?php if (trim((string) $e['target']) !== ''): ?>
+            <span class="muted"> · <?= e($e['target']) ?></span>
+          <?php endif; ?>
+        </td>
+        <td><span class="tag tag--<?= e(category_tone($pdo, (string) $e['category'])) ?>"><?= e($e['category']) ?></span></td>
+        <td class="nowrap">
+          <?= e(exception_period($e)) ?>
+          <?php if ($days !== null): ?>
+            <span class="muted">· <?= $days < 0 ? abs($days) . 'd ago' : $days . 'd left' ?></span>
+          <?php endif; ?>
+        </td>
+        <td><?= badge($stateLabel, $stateTone) ?></td>
+        <td class="nowrap"><?= e($e['owner']) ?: '—' ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+</section>
+<?php endif; ?>
 
 <?php if (can('page.templates') && $tplTop): ?>
 <section class="card">

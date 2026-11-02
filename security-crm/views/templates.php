@@ -22,6 +22,13 @@ foreach ($pdo->query('SELECT category, COUNT(*) c FROM templates GROUP BY catego
 }
 $total = array_sum($counts);
 
+// How many issue reports follow each form template.
+$relMap = [];
+foreach ($pdo->query('SELECT report_template_id, COUNT(*) c FROM issues WHERE report_template_id IS NOT NULL GROUP BY report_template_id')->fetchAll() as $r) {
+    $relMap[(int) $r['report_template_id']] = (int) $r['c'];
+}
+$linkedTotal = array_sum($relMap);
+
 $canEdit = can('template.edit');
 $canExport = can('issue.export');
 
@@ -57,6 +64,7 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
   <summary class="btn btn--primary btn--summary btn--sm">+ New template</summary>
   <form class="card form" method="post" action="index.php">
     <?= csrf_field() ?>
+    <?= once_field() ?>
     <input type="hidden" name="action" value="create_template">
     <input type="hidden" name="back" value="templates">
     <div class="form__grid">
@@ -100,7 +108,7 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
         <div><dt>Owner</dt><dd><?= e($t['owner']) ?: '—' ?></dd></div>
         <div><dt>Placeholders</dt><dd><?= count(placeholders_of((string) $t['body'])) ?></dd></div>
         <div><dt>Downloads</dt><dd><?= (int) $t['downloads'] ?></dd></div>
-        <div><dt>Updated</dt><dd><?= fmt_date($t['updated_at']) ?></dd></div>
+        <div><dt>Issue reports</dt><dd><?= (int) ($relMap[(int) $t['id']] ?? 0) ?></dd></div>
       </dl>
 
       <footer class="tpl__actions">
@@ -111,4 +119,8 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
   <?php endforeach; ?>
 </section>
 
-<p class="footnote"><?= count($rows) ?> template<?= count($rows) === 1 ? '' : 's' ?> shown · downloads are generated as real Word (.docx) files in the browser</p>
+<p class="footnote">
+  <?= count($rows) ?> template<?= count($rows) === 1 ? '' : 's' ?> shown ·
+  <?= $linkedTotal ?> issue report<?= $linkedTotal === 1 ? '' : 's' ?> follow one of these forms ·
+  downloads are generated as real Word (.docx) files in the browser
+</p>

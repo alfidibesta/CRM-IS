@@ -10,7 +10,6 @@ $st->execute([$id]);
 $issue = $st->fetch();
 
 if (!$issue) {
-    http_response_code(404);
     echo '<section class="card"><p class="empty">Issue not found. <a class="link" href="?page=issues">Back to the register</a></p></section>';
     return;
 }
@@ -40,6 +39,16 @@ $canDownload = can('file.download');
 
 $openTasks = count(array_filter($tasks, fn($t) => $t['column_key'] !== 'done'));
 $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
+
+// Report form: which template this report follows and the layout in force.
+$rctx       = ['suspects' => $suspects, 'files' => $files, 'tasks' => $tasks, 'events' => $events];
+$formTpl    = issue_report_template($pdo, $issue);
+$formLayout = issue_report_body($issue, $formTpl);
+$formFill   = issue_report_fill($issue, $rctx);
+$formBlocks = issue_report_blocks($issue, $rctx, $formTpl);
+$adjusted   = trim((string) $issue['report_body']) !== '';
+$allTpls    = $pdo->query('SELECT id, code, name, category, version FROM templates ORDER BY code')->fetchAll();
+$allTags    = known_tags($pdo);
 ?>
 
 <section class="report-head card">
@@ -52,6 +61,9 @@ $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
       <?php if ($issue['closed_at']): ?><?= badge('Closed ' . fmt_date($issue['closed_at']), 'green') ?><?php endif; ?>
     </p>
     <h2 class="report-head__title"><?= e($issue['title']) ?></h2>
+    <?php if (trim((string) $issue['tags']) !== ''): ?>
+      <p class="report-head__tags"><?= tag_chips($issue['tags']) ?></p>
+    <?php endif; ?>
 
     <dl class="factstrip">
       <div><dt>Location</dt><dd><?= e($issue['location']) ?: '—' ?></dd></div>
@@ -82,6 +94,106 @@ $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
     </div>
     <p class="footnote">Report generated <?= date('d M Y') ?> · classification Internal</p>
   </aside>
+</section>
+
+<datalist id="tag-suggest">
+  <?php foreach ($allTags as $t): ?><option value="<?= e($t) ?>"></option><?php endforeach; ?>
+</datalist>
+
+<!-- --------------------------------------------------------- report form -->
+<section class="card card--reportform">
+  <header class="card__head">
+    <h2>Report form</h2>
+    <span class="muted">
+      <?= $formTpl ? e($formTpl['code'] . ' · v' . $formTpl['version']) : 'built-in layout' ?><?= $adjusted ? ' · adjusted for this report' : '' ?>
+    </span>
+  </header>
+
+  <div class="reportform">
+    <div class="reportform__info">
+      <p class="muted">
+        This report can follow any form template from the library. Placeholders are filled from the issue
+        itself, and the layout can be adjusted for this report only.
+      </p>
+
+      <dl class="kv kv--two">
+        <dt>Form template</dt>
+        <dd>
+          <?php if ($formTpl): ?>
+            <a class="link" href="?page=template&amp;id=<?= (int) $formTpl['id'] ?>"><?= e($formTpl['code']) ?> · <?= e($formTpl['name']) ?></a>
+          <?php else: ?>
+            Built-in issue report (8 sections)
+          <?php endif; ?>
+        </dd>
+        <dt>Layout source</dt>
+        <dd><?= $adjusted ? '<span class="tag tag--orange">adjusted for this report</span>' : ($formTpl ? 'inherited from the template' : 'built-in sections') ?></dd>
+        <dt>Placeholders used</dt>
+        <dd><?= count(placeholders_of($formLayout)) ?> of 24 available</dd>
+        <dt>Reports on this form</dt>
+        <dd>
+          <?php if ($formTpl): ?>
+            <?php
+              $relSt = $pdo->prepare('SELECT COUNT(*) FROM issues WHERE report_template_id = ?');
+              $relSt->execute([(int) $formTpl['id']]);
+              $relCount = (int) $relSt->fetchColumn();
+            ?>
+            <a class="link" href="?page=templates&amp;cat=<?= urlencode((string) $formTpl['category']) ?>"><?= $relCount ?> issue report<?= $relCount === 1 ? '' : 's' ?></a>
+          <?php else: ?>
+            —
+          <?php endif; ?>
+        </dd>
+      </dl>
+
+      <div class="keychips">
+        <?php foreach (['CODE', 'TITLE', 'CATEGORY', 'SEVERITY', 'STATUS', 'OWNER', 'LOCATION', 'DEPARTMENT', 'ASSET', 'REPORTED_BY', 'REPORTED_AT', 'DUE_AT', 'RISK_SCORE', 'RISK_RATING', 'LIKELIHOOD', 'IMPACT', 'ROOT_CAUSE', 'IMMEDIATE_ACTION', 'CORRECTIVE_ACTION', 'DESCRIPTION', 'TAGS', 'REVIEWER', 'APPROVER', 'TODAY'] as $k): ?>
+          <code>{{<?= e($k) ?>}}</code>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <div class="reportform__edit">
+      <?php if ($canEdit): ?>
+        <form class="form form--sub" method="post" action="index.php">
+          <?= csrf_field() ?>
+          <input type="hidden" name="action" value="update_issue_report">
+          <input type="hidden" name="back" value="issue">
+          <input type="hidden" name="back_id" value="<?= $id ?>">
+          <input type="hidden" name="issue_id" value="<?= $id ?>">
+
+          <label class="field"><span>Form template</span>
+            <select name="report_template_id">
+              <option value="">Built-in issue report</option>
+              <?php foreach ($allTpls as $t): ?>
+                <option value="<?= (int) $t['id'] ?>" <?= (int) $issue['report_template_id'] === (int) $t['id'] ? 'selected' : '' ?>>
+                  <?= e($t['code']) ?> · <?= e($t['name']) ?> (<?= e($t['category']) ?>)
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+
+          <label class="field"><span>Layout for this report <span class="muted">(markup, saved for this issue only)</span></span>
+            <textarea name="report_body" rows="14" class="codebox" spellcheck="false"><?= e($formLayout) ?></textarea>
+          </label>
+
+          <div class="form__actions">
+            <button type="submit" class="btn btn--primary btn--sm">Save report form</button>
+            <button type="submit" class="btn btn--ghost btn--sm" name="reset_body" value="1">Reset to template</button>
+            <?php if ($canExport): ?>
+              <a class="btn btn--ghost btn--sm" href="?page=issue_doc&amp;id=<?= $id ?>">Download .docx</a>
+            <?php endif; ?>
+          </div>
+          <p class="footnote">Choosing another form re-seeds the layout from that form. Reset drops the per-report adjustment.</p>
+        </form>
+      <?php else: ?>
+        <p class="readnote">Read-only role — download the report to see it rendered with this form.</p>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <details class="panel panel--sub">
+    <summary class="btn btn--ghost btn--summary btn--sm">Preview the report document</summary>
+    <article class="doc doc--report"><?= blocks_to_html($formBlocks, $formFill) ?></article>
+  </details>
 </section>
 
 <div class="grid grid--two grid--report">
@@ -154,6 +266,10 @@ $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
           <label class="field"><span>Approved by</span>
             <input type="text" name="approved_by" maxlength="100" value="<?= e($issue['approved_by']) ?>">
           </label>
+          <label class="field field--wide"><span>Tags <span class="muted">(comma separated, max 6)</span></span>
+            <input type="text" name="tags" maxlength="200" list="tag-suggest" value="<?= e($issue['tags']) ?>"
+                   placeholder="e.g. ot-network, segmentation, after-hours">
+          </label>
 
           <label class="field field--wide"><span>Description &amp; observation</span>
             <textarea name="description" rows="6" placeholder="What was observed, when, where and by whom"><?= e($issue['description']) ?></textarea>
@@ -224,6 +340,7 @@ $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
       <dl class="kv kv--two">
         <dt>Status</dt><dd><?= badge($issue['status'], status_tone($issue['status'])) ?></dd>
         <dt>Severity</dt><dd><?= badge($issue['severity'], severity_tone($issue['severity'])) ?></dd>
+        <dt>Tags</dt><dd><?= trim((string) $issue['tags']) !== '' ? tag_chips($issue['tags']) : '—' ?></dd>
         <dt>Likelihood × impact</dt><dd><?= e(likelihood_label($like)) ?> · <?= e(impact_label($imp)) ?></dd>
         <dt>Owner</dt><dd><?= e($issue['owner']) ?: '—' ?></dd>
         <dt>Description</dt><dd class="preline"><?= e($issue['description']) ?: '—' ?></dd>
@@ -380,7 +497,7 @@ $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.log,.doc,.docx,.xls,.xlsx,.zip">
           <label for="evidence-file" class="dropzone__label">
             <strong>Choose a file</strong> or drop it here
-            <span class="muted">pdf, images, txt, csv, log, doc/docx, xls/xlsx, zip · max 8 MB</span>
+            <span class="muted">pdf, images, txt, csv, log, doc/docx, xls/xlsx, zip · max <?= e(human_size(upload_limit_bytes())) ?></span>
           </label>
           <p class="dropzone__name muted" id="dropzone-name">No file selected</p>
         </div>

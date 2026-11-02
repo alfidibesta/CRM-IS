@@ -100,9 +100,39 @@
 
   /* -------------------------------------------- confirm dialogs (any) */
 
+  function unlock(form) {
+    form.querySelectorAll('button[type=submit]').forEach(function (b) {
+      if (b.dataset.label) b.textContent = b.dataset.label;
+      b.disabled = false;
+    });
+  }
+
   document.querySelectorAll('form[data-confirm]').forEach(function (form) {
     form.addEventListener('submit', function (e) {
-      if (!window.confirm(form.getAttribute('data-confirm'))) e.preventDefault();
+      if (!window.confirm(form.getAttribute('data-confirm'))) {
+        e.preventDefault();
+        unlock(form);
+      }
+    });
+  });
+
+  /* ---------------------------------- auto-submit selects + submit lock */
+
+  document.querySelectorAll('select[data-autosubmit]').forEach(function (select) {
+    select.addEventListener('change', function () { select.form.submit(); });
+  });
+
+  // One click = one request: the button locks itself while the form posts, so
+  // a double click cannot create the same record twice.
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      if (e.defaultPrevented) return;
+      if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+      form.querySelectorAll('button[type=submit]').forEach(function (b) {
+        b.dataset.label = b.textContent;
+        b.textContent = 'Working…';
+        b.disabled = true;
+      });
     });
   });
 

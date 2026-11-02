@@ -17,6 +17,7 @@ function permission_list(): array
         'page.workflow'  => 'Workflow board',
         'page.issues'    => 'Issue register & detail reports',
         'page.templates' => 'Form template library',
+        'page.exceptions' => 'EDLP exception register',
         'page.users'     => 'Users & authority',
         'issue.create'   => 'Report a new issue',
         'issue.update'   => 'Edit issue fields, status and risk',
@@ -28,6 +29,8 @@ function permission_list(): array
         'task.move'      => 'Move cards between columns',
         'task.delete'    => 'Delete tasks',
         'template.edit'  => 'Create / edit / delete templates',
+        'exception.manage' => 'Add / edit / delete exceptions',
+        'exception.category' => 'Manage exception categories',
         'file.download'  => 'Download attached files',
         'user.manage'    => 'Manage users, roles and passwords',
     ];
@@ -46,9 +49,10 @@ function role_list(): array
             'label' => 'Security Manager',
             'hint'  => 'Runs the programme: every record plus template control',
             'perms' => [
-                'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
+                'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
-                'task.create', 'task.move', 'task.delete', 'template.edit', 'file.download',
+                'task.create', 'task.move', 'task.delete', 'template.edit',
+                'exception.manage', 'exception.category', 'file.download',
             ],
         ],
         'analyst' => [
@@ -57,6 +61,7 @@ function role_list(): array
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
+                'page.exceptions', 'exception.manage',
                 'task.create', 'task.move', 'file.download',
             ],
         ],
@@ -65,7 +70,7 @@ function role_list(): array
             'hint'  => 'Read-only: review, download and export',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
-                'file.download', 'issue.export',
+                'page.exceptions', 'file.download', 'issue.export',
             ],
         ],
     ];
@@ -94,6 +99,7 @@ function page_permission(string $page): string
         'templates'  => 'page.templates',
         'template'   => 'page.templates',
         'doc'        => 'page.templates',
+        'exceptions' => 'page.exceptions',
         'users'      => 'page.users',
     ];
     return $map[$page] ?? 'page.dashboard';
@@ -164,18 +170,34 @@ function is_logged_in(): bool
 /** Username/password check with lockout after repeated failures. */
 function attempt_login(PDO $pdo, string $username, string $password): array
 {
+    $username = trim($username);
+    $ip       = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $log      = $pdo->prepare('INSERT INTO login_attempts (username, ip, ok) VALUES (?,?,?)');
+
+    // Address-level throttle: 25 failures in 15 minutes block the address.
+    $th = $pdo->prepare('SELECT COUNT(*) FROM login_attempts
+                         WHERE ip = ? AND ok = 0 AND created_at > (NOW() - INTERVAL 15 MINUTE)');
+    $th->execute([$ip]);
+    if ((int) $th->fetchColumn() >= 25) {
+        $log->execute([$username, $ip, 0]);
+        return ['ok' => false, 'error' => 'Too many failed attempts from this address. Wait 15 minutes and try again.'];
+    }
+
     $st = $pdo->prepare('SELECT * FROM users WHERE username = ?');
-    $st->execute([trim($username)]);
+    $st->execute([$username]);
     $u = $st->fetch();
 
     if (!$u) {
+        $log->execute([$username, $ip, 0]);
         return ['ok' => false, 'error' => 'Username or password is incorrect.'];
     }
     if (!(int) $u['active']) {
+        $log->execute([$username, $ip, 0]);
         return ['ok' => false, 'error' => 'This account is deactivated. Ask an administrator to re-enable it.'];
     }
     if ($u['locked_until'] !== null && strtotime((string) $u['locked_until']) > time()) {
         $mins = (int) ceil((strtotime((string) $u['locked_until']) - time()) / 60);
+        $log->execute([$username, $ip, 0]);
         return ['ok' => false, 'error' => "Too many failed attempts. Locked for another {$mins} minute(s)."];
     }
 
@@ -184,15 +206,17 @@ function attempt_login(PDO $pdo, string $username, string $password): array
         $lock  = $fails >= 5 ? date('Y-m-d H:i:s', time() + 900) : null; // 15 min after 5 tries
         $pdo->prepare('UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?')
             ->execute([$fails, $lock, (int) $u['id']]);
+        $log->execute([$username, $ip, 0]);
         return ['ok' => false, 'error' => 'Username or password is incorrect.'];
     }
 
     $pdo->prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login = NOW() WHERE id = ?')
         ->execute([(int) $u['id']]);
+    $log->execute([$username, $ip, 1]);
 
     session_regenerate_id(true); // prevent session fixation
     $_SESSION['user_id'] = (int) $u['id'];
-    unset($_SESSION['csrf']); // fresh CSRF token per sign-in
+    $_SESSION['csrf'] = bin2hex(random_bytes(16)); // rotate: never leave the token unset
 
     return ['ok' => true];
 }

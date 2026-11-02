@@ -8,13 +8,15 @@ $cat = $_GET['cat'] ?? '';
 $sev = $_GET['sev'] ?? '';
 $stt = $_GET['st'] ?? '';
 $q   = trim($_GET['q'] ?? '');
+$tag = trim($_GET['tag'] ?? '');
 
 $where = [];
 $args  = [];
 if (in_array($cat, ['Physical Security', 'IT Security', 'Strain Security'], true)) { $where[] = 'category = ?'; $args[] = $cat; }
 if (in_array($sev, ['Critical', 'High', 'Medium', 'Low'], true))                  { $where[] = 'severity = ?'; $args[] = $sev; }
 if (in_array($stt, ['Open', 'In Progress', 'Contained', 'Resolved'], true))       { $where[] = 'status = ?';   $args[] = $stt; }
-if ($q !== '') { $where[] = '(title LIKE ? OR code LIKE ? OR owner LIKE ? OR location LIKE ? OR department LIKE ? OR asset LIKE ?)'; array_push($args, "%$q%", "%$q%", "%$q%", "%$q%", "%$q%", "%$q%"); }
+if ($q !== '') { $where[] = '(title LIKE ? OR code LIKE ? OR owner LIKE ? OR location LIKE ? OR department LIKE ? OR asset LIKE ? OR tags LIKE ?)'; array_push($args, "%$q%", "%$q%", "%$q%", "%$q%", "%$q%", "%$q%", "%$q%"); }
+if ($tag !== '') { $where[] = 'tags LIKE ?'; $args[] = '%' . $tag . '%'; }
 $join = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
 $sql = 'SELECT * FROM issues' . $join
@@ -25,7 +27,7 @@ $rows = $st->fetchAll();
 
 function issue_url(array $over): string
 {
-    $base = ['page' => 'issues', 'cat' => $_GET['cat'] ?? '', 'sev' => $_GET['sev'] ?? '', 'st' => $_GET['st'] ?? '', 'q' => trim($_GET['q'] ?? '')];
+    $base = ['page' => 'issues', 'cat' => $_GET['cat'] ?? '', 'sev' => $_GET['sev'] ?? '', 'st' => $_GET['st'] ?? '', 'q' => trim($_GET['q'] ?? ''), 'tag' => $_GET['tag'] ?? ''];
     return '?' . http_build_query(array_merge($base, $over));
 }
 
@@ -40,6 +42,8 @@ $stats = [
     'people'   => (int) $pdo->query('SELECT COUNT(*) FROM suspects')->fetchColumn(),
     'files'    => (int) $pdo->query('SELECT COUNT(*) FROM issue_files')->fetchColumn(),
 ];
+$allTags   = known_tags($pdo);
+$templates = $pdo->query('SELECT id, code, name, category FROM templates ORDER BY code')->fetchAll();
 $canCreate = can('issue.create');
 $canExport = can('issue.export');
 ?>
@@ -72,6 +76,7 @@ $canExport = can('issue.export');
   <summary class="btn btn--primary btn--summary">+ Report new issue</summary>
   <form class="card form" method="post" action="index.php">
     <?= csrf_field() ?>
+    <?= once_field() ?>
     <input type="hidden" name="action" value="create_issue">
     <input type="hidden" name="back" value="issues">
     <div class="form__grid">
@@ -108,6 +113,17 @@ $canExport = can('issue.export');
       <label class="field"><span>Reported by</span><input type="text" name="reported_by" maxlength="100" value="<?= e(current_user_name()) ?>"></label>
       <label class="field"><span>Reported</span><input type="date" name="reported_at" value="<?= date('Y-m-d') ?>"></label>
       <label class="field"><span>Due</span><input type="date" name="due_at"></label>
+      <label class="field field--wide"><span>Tags <span class="muted">(comma separated, max 6)</span></span>
+        <input type="text" name="tags" maxlength="200" list="tag-suggest" placeholder="e.g. tailgating, gate, logistics">
+      </label>
+      <label class="field field--wide"><span>Report form template <span class="muted">(optional — the report follows this form format)</span></span>
+        <select name="report_template_id">
+          <option value="">Built-in issue report</option>
+          <?php foreach ($templates as $t): ?>
+            <option value="<?= (int) $t['id'] ?>"><?= e($t['code']) ?> · <?= e($t['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
       <label class="field field--wide"><span>Description</span>
         <textarea name="description" rows="3" placeholder="What happened, evidence, immediate action taken"></textarea>
       </label>
@@ -120,6 +136,9 @@ $canExport = can('issue.export');
       <span class="muted">Opens the full report page so you can add evidence and suspects.</span>
     </div>
   </form>
+  <datalist id="tag-suggest">
+    <?php foreach ($allTags as $t): ?><option value="<?= e($t) ?>" label="#<?= e($t) ?>"></option><?php endforeach; ?>
+  </datalist>
 </details>
 <?php endif; ?>
 
@@ -150,11 +169,21 @@ $canExport = can('issue.export');
     <?php endforeach; ?>
   </div>
 
+  <?php if ($allTags): ?>
+  <div class="chips chips--filter">
+    <span class="chips__label">Tags</span>
+    <?php foreach (array_slice($allTags, 0, 8) as $t): ?>
+      <?php $on = mb_strtolower($tag) === mb_strtolower($t); ?>
+      <a class="chip <?= $on ? 'is-on' : '' ?>" href="<?= e(issue_url(['tag' => $on ? '' : $t])) ?>">#<?= e($t) ?></a>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
   <form class="search" method="get" action="index.php">
     <input type="hidden" name="page" value="issues">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search code, title, owner, asset…">
     <button type="submit" class="btn btn--ghost">Search</button>
-    <?php if ($cat || $sev || $stt || $q !== ''): ?>
+    <?php if ($cat || $sev || $stt || $q !== '' || $tag !== ''): ?>
       <a class="btn btn--ghost" href="?page=issues">Clear</a>
     <?php endif; ?>
   </form>
@@ -162,10 +191,11 @@ $canExport = can('issue.export');
 
 <section class="card card--flush">
   <table class="table table--list">
+    <caption class="sr-only">Security issue register</caption>
     <thead>
       <tr>
-        <th class="num">#</th>
-        <th>Issue</th>
+        <th class="num" scope="col">#</th>
+        <th scope="col">Issue</th>
         <th>Category</th>
         <th>Severity</th>
         <th class="center">Risk</th>
@@ -192,6 +222,9 @@ $canExport = can('issue.export');
           <span class="cell-issue__sub">
             <?= e($r['location']) ?: '—' ?> · <?= e($r['department']) ?: '—' ?> · owner <?= e($r['owner']) ?: '—' ?>
           </span>
+          <?php if (trim((string) $r['tags']) !== ''): ?>
+            <span class="cell-issue__tags"><?= tag_chips($r['tags'], $tag) ?></span>
+          <?php endif; ?>
         </td>
         <td><span class="tag tag--<?= scope_tone($r['category']) ?>"><?= e($r['category']) ?></span></td>
         <td><?= badge($r['severity'], severity_tone($r['severity'])) ?></td>
@@ -200,28 +233,10 @@ $canExport = can('issue.export');
           <?php if (can('issue.update')): ?>
             <form class="inline-form" method="post" action="index.php">
               <?= csrf_field() ?>
-              <input type="hidden" name="action" value="update_issue">
+              <input type="hidden" name="action" value="set_issue_status">
               <input type="hidden" name="back" value="issues">
               <input type="hidden" name="issue_id" value="<?= (int) $r['id'] ?>">
-              <input type="hidden" name="title" value="<?= e($r['title']) ?>">
-              <input type="hidden" name="category" value="<?= e($r['category']) ?>">
-              <input type="hidden" name="severity" value="<?= e($r['severity']) ?>">
-              <input type="hidden" name="owner" value="<?= e($r['owner']) ?>">
-              <input type="hidden" name="location" value="<?= e($r['location']) ?>">
-              <input type="hidden" name="department" value="<?= e($r['department']) ?>">
-              <input type="hidden" name="asset" value="<?= e($r['asset']) ?>">
-              <input type="hidden" name="reported_by" value="<?= e($r['reported_by']) ?>">
-              <input type="hidden" name="reported_at" value="<?= e($r['reported_at']) ?>">
-              <input type="hidden" name="due_at" value="<?= e($r['due_at']) ?>">
-              <input type="hidden" name="likelihood" value="<?= (int) $r['likelihood'] ?>">
-              <input type="hidden" name="impact" value="<?= (int) $r['impact'] ?>">
-              <input type="hidden" name="description" value="<?= e($r['description']) ?>">
-              <input type="hidden" name="root_cause" value="<?= e($r['root_cause']) ?>">
-              <input type="hidden" name="immediate_action" value="<?= e($r['immediate_action']) ?>">
-              <input type="hidden" name="corrective_action" value="<?= e($r['corrective_action']) ?>">
-              <input type="hidden" name="reviewed_by" value="<?= e($r['reviewed_by']) ?>">
-              <input type="hidden" name="approved_by" value="<?= e($r['approved_by']) ?>">
-              <select name="status" onchange="this.form.submit()">
+              <select name="status" data-autosubmit aria-label="Status for <?= e($r['code']) ?>">
                 <?php foreach (['Open', 'In Progress', 'Contained', 'Resolved'] as $s): ?>
                   <option value="<?= $s ?>" <?= $r['status'] === $s ? 'selected' : '' ?>><?= $s ?></option>
                 <?php endforeach; ?>

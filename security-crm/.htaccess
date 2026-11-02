@@ -1,0 +1,30 @@
+# SecOps CRM — Apache hardening and performance (Laragon and any mod_php host).
+# Nginx equivalents are documented in README.md.
+
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(sql|md|log|ini|json|env)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Evidence, library code and test helpers are reachable only through
+  # index.php (permission-checked) — never as static files.
+  RewriteRule ^(uploads|lib|tests|logs)/ - [F,L]
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+</IfModule>
+
+# Raise the upload ceiling where mod_php allows it, then uncomment. The app
+# reads the effective limit from PHP and prints the real number in the UI.
+# php_value upload_max_filesize 8M
+# php_value post_max_size 10M

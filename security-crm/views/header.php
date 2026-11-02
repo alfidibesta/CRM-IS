@@ -10,6 +10,7 @@ $nav = [
     ['workflow',  'Workflow',  'orange', 'page.workflow'],
     ['sop',       'SOP & Policy', 'blue', 'page.sop'],
     ['templates', 'Templates', 'neutral', 'page.templates'],
+    ['exceptions', 'EDLP Exceptions', 'orange', 'page.exceptions'],
 ];
 
 $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Security' => 'orange'];
@@ -23,6 +24,7 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
 <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to main content</a>
 <div class="shell">
 
   <aside class="sidebar">
@@ -37,8 +39,9 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
     <nav class="nav">
       <?php foreach ($nav as [$key, $label, $tone, $perm]): ?>
         <?php if (!can($perm)) continue; ?>
-        <a class="nav__item <?= $page === $key || ($key === 'issues' && $page === 'issue') || ($key === 'templates' && $page === 'template') ? 'is-active' : '' ?>"
-           href="?page=<?= $key ?>">
+        <?php $isActive = $page === $key || ($key === 'issues' && $page === 'issue') || ($key === 'templates' && $page === 'template'); ?>
+        <a class="nav__item <?= $isActive ? 'is-active' : '' ?>"
+           href="?page=<?= $key ?>" <?= $isActive ? 'aria-current="page"' : '' ?>>
           <span class="nav__dot nav__dot--<?= $tone ?>"></span> <?= e($label) ?>
         </a>
       <?php endforeach; ?>
@@ -50,6 +53,15 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
             <span class="chip-dot chip-dot--<?= $tone ?>"></span> <?= e($cat) ?>
           </a>
         <?php endforeach; ?>
+      <?php endif; ?>
+
+      <?php if (can('page.issues') && ($sidebarTags = known_tags($pdo))): ?>
+        <p class="nav__label">Tags</p>
+        <div class="nav__tags">
+          <?php foreach (array_slice($sidebarTags, 0, 6) as $t): ?>
+            <a class="tagchip" href="?page=issues&amp;tag=<?= urlencode($t) ?>">#<?= e($t) ?></a>
+          <?php endforeach; ?>
+        </div>
       <?php endif; ?>
 
       <?php if (can('page.users')): ?>
@@ -96,11 +108,11 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
     </header>
 
     <?php if ($msg = take_flash()): ?>
-      <div class="flash"><?= e($msg) ?></div>
+      <div class="flash" role="status" aria-live="polite"><?= e($msg) ?></div>
     <?php endif; ?>
     <?php if ($err = $_SESSION['form_error'] ?? null): ?>
-      <div class="flash flash--error"><?= e($err) ?></div>
+      <div class="flash flash--error" role="alert"><?= e($err) ?></div>
       <?php unset($_SESSION['form_error']); ?>
     <?php endif; ?>
 
-    <main class="content">
+    <main class="content" id="main">

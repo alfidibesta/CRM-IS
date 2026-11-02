@@ -10,7 +10,6 @@ $st->execute([$id]);
 $tpl = $st->fetch();
 
 if (!$tpl) {
-    http_response_code(404);
     echo '<section class="card"><p class="empty">Template not found. <a class="link" href="?page=templates">Back to the library</a></p></section>';
     return;
 }
@@ -19,6 +18,11 @@ $canEdit = can('template.edit');
 $ph      = placeholders_of((string) $tpl['body']);
 $blocks  = template_document_blocks($tpl);
 $preview = blocks_to_html($blocks);
+
+// Issue reports that follow this form.
+$relSt = $pdo->prepare('SELECT id, code, title, category, status, severity FROM issues WHERE report_template_id = ? ORDER BY id DESC');
+$relSt->execute([$id]);
+$related = $relSt->fetchAll();
 ?>
 
 <section class="report-head card">
@@ -37,6 +41,7 @@ $preview = blocks_to_html($blocks);
       <div><dt>Placeholders</dt><dd><?= count($ph) ?></dd></div>
       <div><dt>Downloads</dt><dd><?= (int) $tpl['downloads'] ?></dd></div>
       <div><dt>Updated</dt><dd><?= fmt_date($tpl['updated_at']) ?></dd></div>
+      <div><dt>Issue reports</dt><dd><?= count($related) ?></dd></div>
     </dl>
   </div>
 
@@ -91,6 +96,27 @@ $preview = blocks_to_html($blocks);
         <span class="muted">Produces a real .docx you can open and edit in Word.</span>
       </div>
     </form>
+
+    <?php if ($related): ?>
+      <header class="card__head card__head--sub">
+        <h3>Reports using this form</h3>
+        <span class="muted"><?= count($related) ?> issue<?= count($related) === 1 ? '' : 's' ?></span>
+      </header>
+      <ul class="filelist">
+        <?php foreach ($related as $r): ?>
+          <li class="filelist__item">
+            <span class="filelist__icon filelist__icon--doc">DOC</span>
+            <span class="filelist__main">
+              <a class="filelist__name link" href="?page=issue&amp;id=<?= (int) $r['id'] ?>"><?= e($r['code']) ?> · <?= e($r['title']) ?></a>
+              <span class="muted"><?= e($r['category']) ?> · <?= e($r['status']) ?></span>
+            </span>
+            <span class="filelist__actions">
+              <a class="btn btn--ghost btn--xs" href="?page=issue&amp;id=<?= (int) $r['id'] ?>">Report</a>
+            </span>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
 
     <?php if ($canEdit): ?>
       <details class="panel panel--sub">

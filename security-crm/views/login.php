@@ -54,7 +54,7 @@ $demo = [
       <p class="muted">Use the account issued by your Security Manager.</p>
 
       <?php if ($error): ?>
-        <div class="flash flash--error"><?= e($error) ?></div>
+        <div class="flash flash--error" role="alert"><?= e($error) ?></div>
       <?php endif; ?>
 
       <form method="post" action="index.php" class="form form--login">
@@ -73,6 +73,7 @@ $demo = [
         <button type="submit" class="btn btn--primary btn--block">Sign in</button>
       </form>
 
+      <?php if (!empty($cfg['demo_mode'])): ?>
       <div class="login__demo">
         <p class="login__demo-title">Demo accounts</p>
         <table class="table table--tight">
@@ -88,6 +89,7 @@ $demo = [
         </table>
         <p class="footnote">5 failed attempts lock an account for 15 minutes.</p>
       </div>
+      <?php endif; ?>
     </div>
   </section>
 

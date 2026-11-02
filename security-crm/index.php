@@ -10,6 +10,33 @@
 
 declare(strict_types=1);
 
+/* Fail closed: log the error, show a neutral page, never a stack trace. */
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
+
+set_exception_handler(function (Throwable $e): void {
+    $line = '[' . date('c') . '] ' . get_class($e) . ': ' . $e->getMessage()
+        . ' @ ' . $e->getFile() . ':' . $e->getLine() . PHP_EOL;
+    $logDir = __DIR__ . '/logs';
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0775, true);
+    }
+    @file_put_contents($logDir . '/app.log', $line, FILE_APPEND);
+    error_log(rtrim($line));
+
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: text/html; charset=utf-8');
+    }
+    echo '<!doctype html><meta charset="utf-8"><title>500 · SecOps CRM</title>'
+        . '<body style="font:14px/1.5 system-ui,sans-serif;background:#f7f8fa;color:#14161a;padding:40px">'
+        . '<h1 style="font-size:18px;margin:0 0 6px">That action could not be completed</h1>'
+        . '<p style="color:#4b5158;margin:0 0 16px">The error was logged and nothing was half-saved. Try again.</p>'
+        . '<a href="?page=dashboard" style="background:#14161a;color:#fff;border-radius:999px;padding:8px 16px;text-decoration:none">Back to the dashboard</a>'
+        . '</body>';
+});
+
 require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/db.php';
 require __DIR__ . '/lib/auth.php';
@@ -20,9 +47,48 @@ require __DIR__ . '/lib/report.php';
 
 $cfg = require __DIR__ . '/config.php';
 
+/* ----------------------------------------------- session + security headers */
+
+$https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+
 // Start the session before any output so CSRF tokens and flash messages work.
 if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $https,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
     session_start();
+}
+
+// Per-response nonce for the one inline script (the CSRF token hand-off).
+$cspNonce = base64_encode(random_bytes(16));
+$GLOBALS['csp_nonce'] = $cspNonce;
+
+header_remove('X-Powered-By');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: same-origin');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()');
+
+// Framing is denied by default; a deployment that must be embedded (preview
+// pane, intranet portal) declares its allowed parents in SECOPS_FRAME_ANCESTORS.
+$frameAncestors = trim((string) (getenv('SECOPS_FRAME_ANCESTORS') ?: ''));
+if ($frameAncestors === '') {
+    $frameAncestors = "'none'";
+    header('X-Frame-Options: DENY');
+}
+header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+    . "script-src 'self' 'nonce-{$cspNonce}'; connect-src 'self'; form-action 'self'; base-uri 'none'; "
+    . "frame-ancestors {$frameAncestors}");
+
+if ($https) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 }
 
 try {
@@ -36,7 +102,7 @@ try {
 
 auth_boot($pdo);
 
-$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'users', 'download', 'doc', 'issue_doc'];
+$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'download', 'doc', 'issue_doc'];
 
 /** POST target: ?page=X ( + id ) — validated against the page whitelist. */
 function back_to(string $back, int $id = 0): void
@@ -59,6 +125,8 @@ function action_permission(string $action): ?string
     static $map = [
         'create_issue'   => 'issue.create',
         'update_issue'   => 'issue.update',
+        'set_issue_status' => 'issue.update',
+        'update_issue_report' => 'issue.update',
         'issue_note'     => 'issue.note',
         'add_suspect'    => 'issue.suspect',
         'delete_suspect' => 'issue.suspect',
@@ -70,6 +138,12 @@ function action_permission(string $action): ?string
         'create_template'=> 'template.edit',
         'update_template'=> 'template.edit',
         'delete_template'=> 'template.edit',
+        'create_exception'          => 'exception.manage',
+        'update_exception'          => 'exception.manage',
+        'delete_exception'          => 'exception.manage',
+        'create_exception_category' => 'exception.category',
+        'update_exception_category' => 'exception.category',
+        'delete_exception_category' => 'exception.category',
         'create_user'    => 'user.manage',
         'update_user'    => 'user.manage',
         'delete_user'    => 'user.manage',
@@ -80,6 +154,15 @@ function action_permission(string $action): ?string
 /* ---------------------------------------------------------------- actions */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // A body above post_max_size arrives with an empty $_POST: answer 413
+    // instead of processing a half-read request.
+    if (empty($_POST) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        http_response_code(413);
+        exit('<!doctype html><meta charset="utf-8"><p style="font:14px system-ui;padding:32px">'
+            . 'That upload is larger than the server accepts (limit '
+            . htmlspecialchars(human_size(upload_limit_bytes()), ENT_QUOTES, 'UTF-8') . ').</p>');
+    }
+
     $action = (string) ($_POST['action'] ?? '');
 
     // Sign-in is the only action allowed while logged out.
@@ -116,36 +199,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $backId  = (int) ($_POST['back_id'] ?? 0);
     $u       = current_user_name();
 
+    // Creation forms carry a one-shot token, so a resubmitted page cannot
+    // create the same record twice.
+    if (in_array($action, ['create_issue', 'create_exception', 'create_task', 'create_template', 'create_user'], true)
+        && !once_check()) {
+        flash('That form was already submitted — nothing was created twice.');
+        back_to($back, $backId);
+    }
+
     switch ($action) {
         case 'create_issue':
             $category = in_array($_POST['category'] ?? '', ['Physical Security', 'IT Security', 'Strain Security'], true) ? $_POST['category'] : 'IT Security';
             $severity = in_array($_POST['severity'] ?? '', ['Critical', 'High', 'Medium', 'Low'], true) ? $_POST['severity'] : 'Medium';
             $like = max(1, min(5, (int) ($_POST['likelihood'] ?? 3)));
             $imp  = max(1, min(5, (int) ($_POST['impact'] ?? 3)));
+
+            $title = clamp($_POST['title'] ?? '', 200);
+            if ($title === '') {
+                $_SESSION['form_error'] = 'A title is required for the report.';
+                back_to('issues');
+            }
+
             $next = (int) $pdo->query('SELECT COALESCE(MAX(CAST(SUBSTRING(code,5) AS UNSIGNED)), 1000) + 1 FROM issues')->fetchColumn();
+
+            $reportTpl = (int) ($_POST['report_template_id'] ?? 0);
+            if ($reportTpl > 0) {
+                $chk = $pdo->prepare('SELECT id FROM templates WHERE id = ?');
+                $chk->execute([$reportTpl]);
+                $reportTpl = (int) ($chk->fetchColumn() ?: 0);
+            }
 
             $st = $pdo->prepare('INSERT INTO issues (code,title,category,severity,status,owner,location,department,asset,
                                  reported_by,reported_at,due_at,likelihood,impact,risk_score,root_cause,immediate_action,
-                                 corrective_action,description)
-                                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                                 corrective_action,description,tags,report_template_id)
+                                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
             $st->execute([
                 'SEC-' . $next,
-                trim($_POST['title'] ?? ''),
+                $title,
                 $category,
                 $severity,
                 'Open',
-                trim($_POST['owner'] ?? ''),
-                trim($_POST['location'] ?? ''),
-                trim($_POST['department'] ?? ''),
-                trim($_POST['asset'] ?? ''),
-                trim($_POST['reported_by'] ?? '') !== '' ? trim($_POST['reported_by']) : $u,
-                ($_POST['reported_at'] ?? '') !== '' ? $_POST['reported_at'] : date('Y-m-d'),
-                ($_POST['due_at'] ?? '') !== '' ? $_POST['due_at'] : null,
+                clamp($_POST['owner'] ?? '', 100),
+                clamp($_POST['location'] ?? '', 120),
+                clamp($_POST['department'] ?? '', 100),
+                clamp($_POST['asset'] ?? '', 140),
+                clamp($_POST['reported_by'] ?? '', 100) ?: $u,
+                date_or($_POST['reported_at'] ?? '', date('Y-m-d')),
+                date_or($_POST['due_at'] ?? '', null),
                 $like, $imp, $like * $imp,
-                trim($_POST['root_cause'] ?? '') ?: null,
-                trim($_POST['immediate_action'] ?? '') ?: null,
-                trim($_POST['corrective_action'] ?? '') ?: null,
-                trim($_POST['description'] ?? ''),
+                clamp($_POST['root_cause'] ?? '', 5000) ?: null,
+                clamp($_POST['immediate_action'] ?? '', 5000) ?: null,
+                clamp($_POST['corrective_action'] ?? '', 5000) ?: null,
+                clamp($_POST['description'] ?? '', 20000),
+                tag_normalise((string) ($_POST['tags'] ?? '')),
+                $reportTpl > 0 ? $reportTpl : null,
             ]);
             $id    = (int) $pdo->lastInsertId();
             $code  = 'SEC-' . $next;
@@ -170,24 +277,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $imp  = max(1, min(5, (int) ($_POST['impact'] ?? $old['impact'])));
             $closedAt = $status === 'Resolved' ? ($old['closed_at'] ?: date('Y-m-d')) : null;
 
+            if (trim((string) ($_POST['title'] ?? '')) === '') {
+                $_SESSION['form_error'] = 'A title is required; nothing was saved.';
+                back_to('issue', $id);
+            }
+
             $pdo->prepare('UPDATE issues SET title=?, category=?, severity=?, status=?, owner=?, location=?, department=?,
                            asset=?, reported_by=?, reported_at=?, due_at=?, closed_at=?, likelihood=?, impact=?, risk_score=?,
-                           root_cause=?, immediate_action=?, corrective_action=?, reviewed_by=?, approved_by=?, description=?
+                           root_cause=?, immediate_action=?, corrective_action=?, reviewed_by=?, approved_by=?, description=?,
+                           tags=?
                            WHERE id=?')
                 ->execute([
-                    trim($_POST['title'] ?? $old['title']),
+                    clamp($_POST['title'] ?? $old['title'], 200),
                     $category, $severity, $status,
-                    trim($_POST['owner'] ?? ''), trim($_POST['location'] ?? ''),
-                    trim($_POST['department'] ?? ''), trim($_POST['asset'] ?? ''),
-                    trim($_POST['reported_by'] ?? ''),
-                    ($_POST['reported_at'] ?? '') !== '' ? $_POST['reported_at'] : $old['reported_at'],
-                    ($_POST['due_at'] ?? '') !== '' ? $_POST['due_at'] : $old['due_at'],
+                    clamp($_POST['owner'] ?? '', 100), clamp($_POST['location'] ?? '', 120),
+                    clamp($_POST['department'] ?? '', 100), clamp($_POST['asset'] ?? '', 140),
+                    clamp($_POST['reported_by'] ?? '', 100),
+                    date_or($_POST['reported_at'] ?? '', $old['reported_at']),
+                    date_or($_POST['due_at'] ?? '', $old['due_at']),
                     $closedAt, $like, $imp, $like * $imp,
-                    trim($_POST['root_cause'] ?? '') ?: null,
-                    trim($_POST['immediate_action'] ?? '') ?: null,
-                    trim($_POST['corrective_action'] ?? '') ?: null,
-                    trim($_POST['reviewed_by'] ?? ''), trim($_POST['approved_by'] ?? ''),
-                    trim($_POST['description'] ?? ''),
+                    clamp($_POST['root_cause'] ?? '', 5000) ?: null,
+                    clamp($_POST['immediate_action'] ?? '', 5000) ?: null,
+                    clamp($_POST['corrective_action'] ?? '', 5000) ?: null,
+                    clamp($_POST['reviewed_by'] ?? '', 100), clamp($_POST['approved_by'] ?? '', 100),
+                    clamp($_POST['description'] ?? '', 20000),
+                    tag_normalise((string) ($_POST['tags'] ?? $old['tags'] ?? '')),
                     $id,
                 ]);
 
@@ -206,6 +320,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $log->execute([$id, $u, 'field', 'Issue details updated by ' . $u . '.']);
             }
             flash('Issue updated.');
+            back_to('issue', $id);
+
+        case 'set_issue_status':
+            // Quick status change from the register (keeps the page small).
+            $id     = (int) ($_POST['issue_id'] ?? 0);
+            $status = in_array($_POST['status'] ?? '', ['Open', 'In Progress', 'Contained', 'Resolved'], true)
+                ? (string) $_POST['status'] : '';
+            $st = $pdo->prepare('SELECT status, closed_at FROM issues WHERE id = ?');
+            $st->execute([$id]);
+            $old = $st->fetch();
+            if (!$old || $status === '') {
+                back_to('issues');
+            }
+            if ($old['status'] !== $status) {
+                $closedAt = $status === 'Resolved' ? ($old['closed_at'] ?: date('Y-m-d')) : null;
+                $pdo->prepare('UPDATE issues SET status = ?, closed_at = ? WHERE id = ?')
+                    ->execute([$status, $closedAt, $id]);
+                $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
+                    ->execute([$id, $u, 'status', "Status changed from {$old['status']} to {$status}."]);
+                flash("Status set to {$status}.");
+            }
+            back_to('issues');
+
+        case 'update_issue_report':
+            $id = (int) ($_POST['issue_id'] ?? 0);
+            $st = $pdo->prepare('SELECT * FROM issues WHERE id = ?');
+            $st->execute([$id]);
+            $old = $st->fetch();
+            if (!$old) {
+                back_to('issues');
+            }
+
+            $tplId = (int) ($_POST['report_template_id'] ?? 0);
+            $tplName = '';
+            if ($tplId > 0) {
+                $chk = $pdo->prepare('SELECT code, name FROM templates WHERE id = ?');
+                $chk->execute([$tplId]);
+                $tpl = $chk->fetch();
+                if ($tpl) {
+                    $tplName = $tpl['code'] . ' ' . $tpl['name'];
+                } else {
+                    $tplId = 0;
+                }
+            }
+
+            $body = trim((string) ($_POST['report_body'] ?? ''));
+            if (isset($_POST['reset_body'])) {
+                $body = '';
+            }
+            // A different form re-seeds the layout from that form.
+            if ($tplId !== (int) $old['report_template_id']) {
+                $body = '';
+            }
+            $body = $body === '' ? null : mb_substr($body, 0, 20000);
+
+            $tplChanged  = $tplId !== (int) $old['report_template_id'];
+            $bodyChanged = (string) ($body ?? '') !== (string) ($old['report_body'] ?? '');
+
+            $pdo->prepare('UPDATE issues SET report_template_id = ?, report_body = ? WHERE id = ?')
+                ->execute([$tplId > 0 ? $tplId : null, $body, $id]);
+
+            $log = $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)');
+            if ($tplChanged) {
+                $log->execute([$id, $u, 'field', $tplId > 0
+                    ? "Report form set to {$tplName}."
+                    : 'Report form template cleared — the built-in report layout is used.']);
+            }
+            if ($bodyChanged) {
+                $log->execute([$id, $u, 'field', $body === null
+                    ? 'Report layout reset to the selected form template.'
+                    : 'Report layout adjusted for this issue.']);
+            }
+            flash('Report form saved.');
             back_to('issue', $id);
 
         case 'issue_note':
@@ -231,11 +418,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('INSERT INTO suspects (issue_id,name,employee_no,department,position,shift,involvement,contact,statement,interviewed)
                                VALUES (?,?,?,?,?,?,?,?,?,?)')
                     ->execute([
-                        $id, $name,
-                        trim($_POST['employee_no'] ?? ''), trim($_POST['department'] ?? ''),
-                        trim($_POST['position'] ?? ''), trim($_POST['shift'] ?? ''),
-                        $involvement, trim($_POST['contact'] ?? ''),
-                        trim($_POST['statement'] ?? '') ?: null,
+                        $id, clamp($name, 120),
+                        clamp($_POST['employee_no'] ?? '', 40), clamp($_POST['department'] ?? '', 100),
+                        clamp($_POST['position'] ?? '', 100), clamp($_POST['shift'] ?? '', 40),
+                        $involvement, clamp($_POST['contact'] ?? '', 60),
+                        clamp($_POST['statement'] ?? '', 5000) ?: null,
                         isset($_POST['interviewed']) ? 1 : 0,
                     ]);
                 $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
@@ -295,6 +482,174 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             back_to('issue', $id);
 
+        case 'create_exception':
+            $cats     = exception_category_names($pdo);
+            $category = in_array($_POST['category'] ?? '', $cats, true) ? (string) $_POST['category'] : ($cats[0] ?? 'Other');
+            $start    = date_or($_POST['period_start'] ?? '', date('Y-m-d'));
+            $end      = date_or($_POST['period_end'] ?? '', null);
+            if ($end !== null && $start !== null && $end < $start) {
+                [$start, $end] = [$end, $start];
+            }
+            $excTitle = clamp($_POST['title'] ?? '', 200);
+            if ($excTitle === '') {
+                $_SESSION['form_error'] = 'An exception title is required.';
+                back_to('exceptions');
+            }
+            $next = (int) $pdo->query('SELECT COALESCE(MAX(CAST(SUBSTRING(code,5) AS UNSIGNED)), 0) + 1 FROM exceptions')->fetchColumn();
+            $code = 'EXC-' . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
+
+            $pdo->prepare('INSERT INTO exceptions
+                    (code,title,system,category,target,detail,justification,control,period_start,period_end,
+                     status,risk_level,owner,approved_by,ref_no)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([
+                    $code,
+                    $excTitle,
+                    'EDLP',
+                    $category,
+                    clamp($_POST['target'] ?? '', 180),
+                    clamp($_POST['detail'] ?? '', 5000) ?: null,
+                    clamp($_POST['justification'] ?? '', 5000) ?: null,
+                    clamp($_POST['control'] ?? '', 255),
+                    $start, $end,
+                    in_array($_POST['status'] ?? '', ['Active', 'Pending', 'Revoked'], true) ? $_POST['status'] : 'Active',
+                    in_array($_POST['risk_level'] ?? '', ['High', 'Medium', 'Low'], true) ? $_POST['risk_level'] : 'Medium',
+                    clamp($_POST['owner'] ?? '', 100),
+                    clamp($_POST['approved_by'] ?? '', 100),
+                    clamp($_POST['ref_no'] ?? '', 40),
+                ]);
+            flash("Exception {$code} added for {$category}.");
+            back_to('exceptions');
+
+        case 'update_exception':
+            $eid = (int) ($_POST['exception_id'] ?? 0);
+            $st = $pdo->prepare('SELECT * FROM exceptions WHERE id = ?');
+            $st->execute([$eid]);
+            $old = $st->fetch();
+            if (!$old) {
+                back_to('exceptions');
+            }
+
+            $cats     = exception_category_names($pdo);
+            $category = in_array($_POST['category'] ?? '', $cats, true) ? (string) $_POST['category'] : (string) $old['category'];
+            $start    = date_or($_POST['period_start'] ?? '', (string) $old['period_start']);
+            $end      = date_or($_POST['period_end'] ?? '', null);
+            if ($end !== null && $start !== null && $end < $start) {
+                [$start, $end] = [$end, $start];
+            }
+            $excTitle = clamp($_POST['title'] ?? '', 200);
+            if ($excTitle === '') {
+                $_SESSION['form_error'] = 'An exception title is required; nothing was saved.';
+                back_to('exceptions');
+            }
+
+            $pdo->prepare('UPDATE exceptions SET title=?, category=?, target=?, detail=?, justification=?, control=?,
+                           period_start=?, period_end=?, status=?, risk_level=?, owner=?, approved_by=?, ref_no=?
+                           WHERE id=?')
+                ->execute([
+                    $excTitle,
+                    $category,
+                    clamp($_POST['target'] ?? '', 180),
+                    clamp($_POST['detail'] ?? '', 5000) ?: null,
+                    clamp($_POST['justification'] ?? '', 5000) ?: null,
+                    clamp($_POST['control'] ?? '', 255),
+                    $start, $end,
+                    in_array($_POST['status'] ?? '', ['Active', 'Pending', 'Revoked'], true) ? $_POST['status'] : $old['status'],
+                    in_array($_POST['risk_level'] ?? '', ['High', 'Medium', 'Low'], true) ? $_POST['risk_level'] : $old['risk_level'],
+                    clamp($_POST['owner'] ?? '', 100),
+                    clamp($_POST['approved_by'] ?? '', 100),
+                    clamp($_POST['ref_no'] ?? '', 40),
+                    $eid,
+                ]);
+
+            flash("Exception {$old['code']} updated.");
+            back_to('exceptions');
+
+        case 'delete_exception':
+            $eid = (int) ($_POST['exception_id'] ?? 0);
+            $st = $pdo->prepare('SELECT code FROM exceptions WHERE id = ?');
+            $st->execute([$eid]);
+            $code = (string) $st->fetchColumn();
+            if ($code !== '') {
+                $pdo->prepare('DELETE FROM exceptions WHERE id = ?')->execute([$eid]);
+                flash("Exception {$code} deleted.");
+            }
+            back_to('exceptions');
+
+        case 'create_exception_category':
+            $name = trim(mb_substr((string) ($_POST['name'] ?? ''), 0, 60));
+            if ($name === '') {
+                $_SESSION['form_error'] = 'Give the category a name.';
+                back_to('exceptions');
+            }
+            $dupe = $pdo->prepare('SELECT id FROM exception_categories WHERE name = ?');
+            $dupe->execute([$name]);
+            if ($dupe->fetch()) {
+                $_SESSION['form_error'] = 'That category already exists.';
+                back_to('exceptions');
+            }
+            $sort = (int) $pdo->query('SELECT COALESCE(MAX(sort), 0) + 1 FROM exception_categories')->fetchColumn();
+            $pdo->prepare('INSERT INTO exception_categories (name, tone, sort) VALUES (?,?,?)')
+                ->execute([
+                    $name,
+                    in_array($_POST['tone'] ?? '', ['red', 'blue', 'orange', 'green', 'neutral'], true) ? $_POST['tone'] : 'neutral',
+                    $sort,
+                ]);
+            flash("Category {$name} added.");
+            back_to('exceptions');
+
+        case 'update_exception_category':
+            $cid = (int) ($_POST['category_id'] ?? 0);
+            $st = $pdo->prepare('SELECT * FROM exception_categories WHERE id = ?');
+            $st->execute([$cid]);
+            $cat = $st->fetch();
+            if (!$cat) {
+                back_to('exceptions');
+            }
+            $name = trim(mb_substr((string) ($_POST['name'] ?? ''), 0, 60)) ?: (string) $cat['name'];
+            $tone = in_array($_POST['tone'] ?? '', ['red', 'blue', 'orange', 'green', 'neutral'], true) ? $_POST['tone'] : (string) $cat['tone'];
+            $sort = (int) ($_POST['sort'] ?? $cat['sort']);
+
+            $dupe = $pdo->prepare('SELECT id FROM exception_categories WHERE name = ? AND id <> ?');
+            $dupe->execute([$name, $cid]);
+            if ($dupe->fetch()) {
+                $_SESSION['form_error'] = 'Another category already uses that name.';
+                back_to('exceptions');
+            }
+
+            $pdo->beginTransaction();
+            $pdo->prepare('UPDATE exception_categories SET name = ?, tone = ?, sort = ? WHERE id = ?')
+                ->execute([$name, $tone, $sort, $cid]);
+            if ($name !== (string) $cat['name']) {
+                // Renaming a category carries its exceptions with it.
+                $pdo->prepare('UPDATE exceptions SET category = ? WHERE category = ?')
+                    ->execute([$name, $cat['name']]);
+            }
+            $pdo->commit();
+            flash("Category {$name} saved.");
+            back_to('exceptions');
+
+        case 'delete_exception_category':
+            $cid = (int) ($_POST['category_id'] ?? 0);
+            $st = $pdo->prepare('SELECT name FROM exception_categories WHERE id = ?');
+            $st->execute([$cid]);
+            $name = (string) $st->fetchColumn();
+            if ($name === '') {
+                back_to('exceptions');
+            }
+            $used = $pdo->prepare('SELECT COUNT(*) FROM exceptions WHERE category = ?');
+            $used->execute([$name]);
+            $count = (int) $used->fetchColumn();
+            if ($count > 0) {
+                $_SESSION['form_error'] = "Category \"{$name}\" is used by {$count} exception(s). Re-assign them before deleting it.";
+            } elseif ((int) $pdo->query('SELECT COUNT(*) FROM exception_categories')->fetchColumn() <= 1) {
+                $_SESSION['form_error'] = 'Keep at least one category.';
+            } else {
+                $pdo->prepare('DELETE FROM exception_categories WHERE id = ?')->execute([$cid]);
+                flash("Category {$name} deleted.");
+            }
+            back_to('exceptions');
+
         case 'create_task':
             $col = in_array($_POST['column'] ?? '', ['backlog', 'planned', 'in_progress', 'review', 'done'], true) ? $_POST['column'] : 'backlog';
             $cat = in_array($_POST['category'] ?? '', ['Physical', 'IT', 'Strain', 'General'], true) ? $_POST['category'] : 'General';
@@ -350,19 +705,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             back_to($back, $backId);
 
         case 'create_template':
-            $code = strtoupper(trim($_POST['code'] ?? ''));
+            $code = clamp(strtoupper($_POST['code'] ?? ''), 20);
             if ($code === '') {
                 $code = 'TPL-' . str_pad((string) ((int) $pdo->query('SELECT COUNT(*) FROM templates')->fetchColumn() + 1), 3, '0', STR_PAD_LEFT);
+            }
+            if (clamp($_POST['name'] ?? '', 160) === '') {
+                $_SESSION['form_error'] = 'A template name is required.';
+                back_to('templates');
             }
             $pdo->prepare('INSERT INTO templates (code,name,category,version,owner,description,body) VALUES (?,?,?,?,?,?,?)')
                 ->execute([
                     $code,
-                    trim($_POST['name'] ?? 'Untitled form'),
+                    clamp($_POST['name'] ?? 'Untitled form', 160),
                     in_array($_POST['category'] ?? '', ['Legal', 'HR', 'Security', 'Audit', 'Operations'], true) ? $_POST['category'] : 'Legal',
-                    trim($_POST['version'] ?? '1.0'),
-                    trim($_POST['owner'] ?? ''),
-                    trim($_POST['description'] ?? ''),
-                    (string) ($_POST['body'] ?? ''),
+                    clamp($_POST['version'] ?? '1.0', 10),
+                    clamp($_POST['owner'] ?? '', 100),
+                    clamp($_POST['description'] ?? '', 400),
+                    mb_substr((string) ($_POST['body'] ?? ''), 0, 60000),
                 ]);
             $tid = (int) $pdo->lastInsertId();
             flash('Template created.');
@@ -372,12 +731,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $tid = (int) ($_POST['template_id'] ?? 0);
             $pdo->prepare('UPDATE templates SET name=?, category=?, version=?, owner=?, description=?, body=? WHERE id=?')
                 ->execute([
-                    trim($_POST['name'] ?? ''),
+                    clamp($_POST['name'] ?? '', 160) ?: 'Untitled form',
                     in_array($_POST['category'] ?? '', ['Legal', 'HR', 'Security', 'Audit', 'Operations'], true) ? $_POST['category'] : 'Legal',
-                    trim($_POST['version'] ?? '1.0'),
-                    trim($_POST['owner'] ?? ''),
-                    trim($_POST['description'] ?? ''),
-                    (string) ($_POST['body'] ?? ''),
+                    clamp($_POST['version'] ?? '1.0', 10),
+                    clamp($_POST['owner'] ?? '', 100),
+                    clamp($_POST['description'] ?? '', 400),
+                    mb_substr((string) ($_POST['body'] ?? ''), 0, 60000),
                     $tid,
                 ]);
             flash('Template saved.');
@@ -413,8 +772,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('INSERT INTO users (username,name,email,role,password_hash,active) VALUES (?,?,?,?,?,1)')
                 ->execute([
                     $username,
-                    trim($_POST['name'] ?? '') ?: $username,
-                    trim($_POST['email'] ?? ''),
+                    clamp($_POST['name'] ?? '', 100) ?: $username,
+                    clamp($_POST['email'] ?? '', 120),
                     $role,
                     password_hash($password, PASSWORD_DEFAULT),
                 ]);
@@ -434,7 +793,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->prepare('UPDATE users SET name=?, email=?, role=?, active=? WHERE id=?')
-                ->execute([trim($_POST['name'] ?? ''), trim($_POST['email'] ?? ''), $role, $active, $uid]);
+                ->execute([clamp($_POST['name'] ?? '', 100), clamp($_POST['email'] ?? '', 120), $role, $active, $uid]);
 
             $password = (string) ($_POST['password'] ?? '');
             if ($password !== '') {
@@ -575,8 +934,11 @@ if ($page === 'issue_doc') {
         'events'   => $q('SELECT * FROM issue_events WHERE issue_id = ? ORDER BY created_at, id', [$issue['id']]),
     ];
 
+    $form = issue_report_template($pdo, $issue);
+    $fill = issue_report_fill($issue, $ctx);
+
     docx_send($issue['code'] . '-issue-report.docx',
-        docx_package(issue_report_blocks($issue, $ctx), [], [
+        docx_package(issue_report_blocks($issue, $ctx, $form), $fill, [
             'title'   => $issue['code'] . ' — Information Security Issue Report',
             'creator' => 'SecOps CRM · ' . current_user_name(),
         ]));
@@ -592,8 +954,20 @@ $titles = [
     'issue'     => ['Issue Detail Report', 'Full investigation record, evidence and sign-off'],
     'templates' => ['Form Templates', 'NDA, agreements and controlled forms — download as Word'],
     'template'  => ['Template Detail', 'Preview, fill in and download as .docx'],
+    'exceptions' => ['EDLP Exceptions', 'Approved deviations for USB, websites, cameras and more'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
 ];
+
+// Resolve the record before any output: a missing id must answer 404, not 200.
+if ($page === 'issue' || $page === 'template') {
+    $table = $page === 'issue' ? 'issues' : 'templates';
+    $exists = $pdo->prepare("SELECT 1 FROM {$table} WHERE id = ?");
+    $exists->execute([(int) ($_GET['id'] ?? 0)]);
+    if (!$exists->fetchColumn()) {
+        http_response_code(404);
+        $titles[$page] = ['Not found', 'That record does not exist any more'];
+    }
+}
 
 require __DIR__ . '/views/header.php';
 require __DIR__ . '/views/' . $page . '.php';

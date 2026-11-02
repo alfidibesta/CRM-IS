@@ -6,3 +6,14 @@ dist
 !.dev.vars.example
 .DS_Store
 *.log
+
+# Local runtime (PHP + MariaDB binaries and their data dir) — reinstall per README
+tools/
+
+# Uploaded evidence: keep the folder, not the files
+security-crm/uploads/*
+!security-crm/uploads/.htaccess
+
+# Local secrets / dumps
+security-crm/config.local.php
+*.sql.gz

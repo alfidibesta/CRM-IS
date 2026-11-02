@@ -9,7 +9,40 @@
 
 declare(strict_types=1);
 
-const UPLOAD_MAX_BYTES = 8388608; // 8 MB
+const UPLOAD_MAX_BYTES = 8388608; // 8 MB ceiling for the application itself
+
+/** php.ini sizes look like "2M", "512K", "1G" or plain bytes. */
+function ini_bytes(string $value): int
+{
+    $value = trim($value);
+    if ($value === '' || $value === '-1') {
+        return 0;
+    }
+    $num  = (float) $value;
+    $unit = strtolower(substr($value, -1));
+    return (int) match ($unit) {
+        'g' => $num * 1073741824,
+        'm' => $num * 1048576,
+        'k' => $num * 1024,
+        default => $num,
+    };
+}
+
+/**
+ * Effective per-file cap: the smallest of php.ini, post_max_size and our own.
+ * The UI and the server both use this, so the promised limit is the real one.
+ */
+function upload_limit_bytes(): int
+{
+    $limits = [];
+    foreach ([ini_get('upload_max_filesize'), ini_get('post_max_size'), UPLOAD_MAX_BYTES] as $raw) {
+        $bytes = is_numeric($raw) ? (int) $raw : ini_bytes((string) $raw);
+        if ($bytes > 0) {
+            $limits[] = $bytes;
+        }
+    }
+    return $limits ? (int) min($limits) : UPLOAD_MAX_BYTES;
+}
 
 function uploads_dir(): string
 {
@@ -84,8 +117,8 @@ function store_upload(array $file): array
     if ($size <= 0) {
         return ['ok' => false, 'error' => 'The file is empty.'];
     }
-    if ($size > UPLOAD_MAX_BYTES) {
-        return ['ok' => false, 'error' => 'Files must be 8 MB or smaller.'];
+    if ($size > upload_limit_bytes()) {
+        return ['ok' => false, 'error' => 'Files must be ' . human_size(upload_limit_bytes()) . ' or smaller.'];
     }
 
     $ext = file_ext($name);

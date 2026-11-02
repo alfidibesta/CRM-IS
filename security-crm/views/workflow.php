@@ -67,6 +67,7 @@ $overdue = count(array_filter($tasks, fn($t) => $t['due_at'] && $t['due_at'] < d
     <summary class="btn btn--primary btn--summary">+ Add task</summary>
     <form class="card form form--inline" method="post" action="index.php">
       <?= csrf_field() ?>
+      <?= once_field() ?>
       <input type="hidden" name="action" value="create_task">
       <input type="hidden" name="back" value="workflow">
       <div class="form__grid">
@@ -153,4 +154,4 @@ $overdue = count(array_filter($tasks, fn($t) => $t['due_at'] && $t['due_at'] < d
   <input type="hidden" name="task_id" id="delete-task-id" value="">
 </form>
 
-<p class="footnote" id="board-status"><?= $canMove ? 'Changes are saved automatically.' : 'Your role has read-only access to the board.' ?></p>
+<p class="footnote" id="board-status" role="status" aria-live="polite"><?= $canMove ? 'Changes are saved automatically.' : 'Your role has read-only access to the board.' ?></p>
