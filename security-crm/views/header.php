@@ -92,6 +92,47 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
         <span class="pill">ISO 27001 scope</span>
         <span class="pill pill--date"><?= date('D, d M Y') ?></span>
 
+        <?php $bell = notify_summary($pdo); ?>
+        <details class="bell">
+          <summary class="bell__btn" aria-label="Notifications, <?= (int) $bell['unread'] ?> unread">
+            Alerts
+            <?php if ($bell['unread'] > 0): ?>
+              <span class="bell__count"><?= $bell['unread'] > 99 ? '99+' : (int) $bell['unread'] ?></span>
+            <?php endif; ?>
+          </summary>
+          <div class="bell__panel">
+            <div class="bell__head">
+              <strong><?= (int) $bell['unread'] ?> unread</strong>
+              <a class="link" href="?page=notifications">View all</a>
+            </div>
+            <ul class="bell__list">
+              <?php foreach ($bell['items'] as $n): ?>
+                <li class="bell__item<?= $n['read_at'] ? '' : ' is-unread' ?>">
+                  <a class="bell__link" href="<?= e($n['link'] ?: '?page=notifications') ?>">
+                    <span class="bell__dot bell__dot--<?= e($n['tone']) ?>"></span>
+                    <span class="bell__text">
+                      <strong><?= e($n['title']) ?></strong>
+                      <span><?= e($n['body']) ?></span>
+                    </span>
+                    <span class="bell__when"><?= e(notification_when($n['created_at'])) ?></span>
+                  </a>
+                </li>
+              <?php endforeach; ?>
+              <?php if (!$bell['items']): ?>
+                <li class="bell__empty">Nothing yet — alerts land here.</li>
+              <?php endif; ?>
+            </ul>
+            <?php if ($bell['unread'] > 0): ?>
+              <form class="bell__foot" method="post" action="index.php">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="notifications_read">
+                <input type="hidden" name="back" value="<?= e($page) ?>">
+                <button type="submit" class="btn btn--ghost btn--xs">Mark all read</button>
+              </form>
+            <?php endif; ?>
+          </div>
+        </details>
+
         <div class="userchip" title="<?= e($u['email'] ?? '') ?>">
           <span class="userchip__avatar"><?= e(user_initials($u)) ?></span>
           <span class="userchip__text">

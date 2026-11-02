@@ -41,6 +41,7 @@ require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/db.php';
 require __DIR__ . '/lib/auth.php';
 require __DIR__ . '/lib/audit.php';
+require __DIR__ . '/lib/notify.php';
 require __DIR__ . '/lib/uploads.php';
 require __DIR__ . '/lib/templates.php';
 require __DIR__ . '/lib/word.php';
@@ -103,8 +104,9 @@ try {
 
 auth_boot($pdo);
 audit_boot($pdo);
+notify_boot($pdo);
 
-$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'audit', 'download', 'doc', 'issue_doc'];
+$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'audit', 'notifications', 'download', 'doc', 'issue_doc'];
 
 /** POST target: ?page=X ( + id ) — validated against the page whitelist. */
 function back_to(string $back, int $id = 0): void
@@ -146,6 +148,8 @@ function action_permission(string $action): ?string
         'create_exception_category' => 'exception.category',
         'update_exception_category' => 'exception.category',
         'delete_exception_category' => 'exception.category',
+        'notifications_read' => 'page.dashboard',
+        'notification_read'  => 'page.dashboard',
         'create_user'    => 'user.manage',
         'update_user'    => 'user.manage',
         'delete_user'    => 'user.manage',
@@ -261,6 +265,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                 ->execute([$id, $u, 'created', "Reported {$code} as {$severity} severity."]);
             audit('issue.create', 'issue', $id, $code, $title . ' · ' . $category . ' · ' . $severity . ' · risk ' . ($like * $imp));
+            notify_issue_assignment($pdo, (string) ($_POST['owner'] ?? ''), $code, $title, $id);
+            if ($severity === 'Critical') {
+                notify_issue_critical($code, $title, $id);
+            }
             flash("Issue {$code} created.");
             back_to('issue', $id);
 
@@ -329,6 +337,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($newScore !== (int) $old['risk_score']) {
                 $changed[] = "risk {$old['risk_score']} to {$newScore}";
+            }
+            $newOwner = clamp($_POST['owner'] ?? '', 100);
+            if ($newOwner !== '' && $newOwner !== (string) $old['owner']) {
+                notify_issue_assignment($pdo, $newOwner, (string) $old['code'], (string) $old['title'], $id);
+            }
+            if ($severity === 'Critical' && (string) $old['severity'] !== 'Critical') {
+                notify_issue_critical((string) $old['code'], (string) $old['title'], $id);
             }
             audit('issue.update', 'issue', $id, (string) $old['code'], $changed ? ucfirst(implode('; ', $changed)) : 'Fields saved');
             if ($status !== $old['status']) {
@@ -906,6 +921,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash("User {$victim['username']} deleted.");
             }
             back_to('users');
+
+        case 'notifications_read':
+            $marked = notify_mark_all($pdo, (int) (current_user()['id'] ?? 0));
+            flash($marked > 0
+                ? $marked . ' notification(s) marked as read.'
+                : 'Nothing was unread — you are all caught up.');
+            back_to(in_array($back, ['notifications', 'dashboard'], true) ? $back : 'notifications');
+
+        case 'notification_read':
+            notify_mark_one($pdo, (int) (current_user()['id'] ?? 0), (int) ($_POST['id'] ?? 0));
+            back_to(in_array($back, ['notifications', 'dashboard'], true) ? $back : 'notifications');
     }
 
     back_to($back, $backId);
@@ -930,6 +956,13 @@ if ($page === 'login') {
 
 require_login();
 require_permission(page_permission($page));
+
+// Time-based alerts (due issues, expiring exceptions, document reviews) are
+// worked out on page load. The sweep is deduped per day, so no cron is needed
+// and a POST never pays for it.
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    notify_sweep($pdo);
+}
 
 /* ------------------------------------------------------------- exports */
 
@@ -1072,6 +1105,7 @@ $titles = [
     'exceptions' => ['EDLP Exceptions', 'Approved deviations for USB, websites, cameras and more'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
     'audit'     => ['Audit Trail', 'Every recorded change, who made it and from where'],
+    'notifications' => ['Notifications', 'Alerts for your issues, exceptions and document reviews'],
 ];
 
 // Resolve the record before any output: a missing id must answer 404, not 200.

@@ -16,6 +16,7 @@ require __DIR__ . '/../lib/templates.php';
 require __DIR__ . '/../lib/report.php';
 require __DIR__ . '/../lib/uploads.php';
 require __DIR__ . '/../lib/audit.php';
+require __DIR__ . '/../lib/notify.php';
 
 $pass = 0;
 $fail = 0;
@@ -112,6 +113,24 @@ ck('audit where args', $wargs, ['%x%', '%x%', '%x%', 'auth.login', '%sam%']);
 ck('audit without pdo is silent', (static function (): bool {
     unset($GLOBALS['audit_pdo']);
     audit('issue.note');
+    return true;
+})(), true);
+
+/* --------------------------------------------------------- notifications */
+ck('kind label', notification_label('issue_assigned'), 'Assigned to you');
+ck('kind tone', notification_tone('issue_critical'), 'red');
+ck('kind fallback', notification_label('nope'), 'nope');
+ck('kind catalogue size', count(notification_kinds()), 6);
+ck('when now', notification_when(date('Y-m-d H:i:s')), 'just now');
+ck('when hours', notification_when(date('Y-m-d H:i:s', time() - 7200)), '2h ago');
+ck('when days', notification_when(date('Y-m-d H:i:s', time() - 3 * 86400)), '3d ago');
+ck('when null', notification_when(null), '—');
+ck('filters default unread', notify_filters([])['state'], 'unread');
+ck('filters all', notify_filters(['state' => 'all'])['state'], 'all');
+ck('filters junk kind', notify_filters(['kind' => '<script>'])['kind'], '');
+ck('notify without pdo is silent', (static function (): bool {
+    unset($GLOBALS['notify_pdo']);
+    notify(1, 'issue_due', 'x');
     return true;
 })(), true);
 

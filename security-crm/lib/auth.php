@@ -103,6 +103,7 @@ function page_permission(string $page): string
         'exceptions' => 'page.exceptions',
         'users'      => 'page.users',
         'audit'      => 'page.audit',
+        'notifications' => 'page.dashboard',
     ];
     return $map[$page] ?? 'page.dashboard';
 }

@@ -233,6 +233,22 @@ CREATE TABLE `users` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+CREATE TABLE `notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `kind` varchar(30) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `body` varchar(400) NOT NULL DEFAULT '',
+  `link` varchar(200) NOT NULL DEFAULT '',
+  `tone` varchar(10) NOT NULL DEFAULT 'neutral',
+  `dedupe` varchar(140) DEFAULT NULL,
+  `read_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_notif_dedupe` (`dedupe`),
+  KEY `idx_notif_user` (`user_id`,`read_at`),
+  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `audit_log` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `actor_id` int(11) DEFAULT NULL,

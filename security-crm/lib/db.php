@@ -137,6 +137,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
     INDEX idx_audit_entity (entity, entity_id)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS notifications (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    user_id    INT NOT NULL,
+    kind       VARCHAR(30)  NOT NULL,
+    title      VARCHAR(200) NOT NULL,
+    body       VARCHAR(400) NOT NULL DEFAULT '',
+    link       VARCHAR(200) NOT NULL DEFAULT '',
+    tone       VARCHAR(10)  NOT NULL DEFAULT 'neutral',
+    dedupe     VARCHAR(140) NULL,
+    read_at    DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_notif_dedupe (dedupe),
+    INDEX idx_notif_user (user_id, read_at),
+    CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS suspects (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     issue_id     INT NOT NULL,
@@ -281,6 +297,7 @@ function seedIfEmpty(PDO $pdo): void
     seed_exceptions($pdo);
     seed_activity($pdo);
     seed_audit($pdo);
+    seed_notifications($pdo);
 }
 
 /**
@@ -330,6 +347,37 @@ function seed_audit(PDO $pdo): void
             $userId[$username] ?? null, $actor, $role, $action, $entity, $entityId,
             $label, $detail, '10.20.4.' . random_int(10, 60),
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Plant WS', (int) $hours,
+        ]);
+    }
+}
+
+/** A few unread alerts so the bell is not empty on a fresh install. */
+function seed_notifications(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM notifications')->fetchColumn() > 0) {
+        return;
+    }
+
+    $issues = $pdo->query('SELECT code, id FROM issues')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $users  = $pdo->query('SELECT username, id FROM users')->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    $rows = [
+        ['admin',   'issue_critical',     'Critical issue SEC-1010', 'Pressure to bypass change approval on SCADA', '?page=issue&id=' . (int) ($issues['SEC-1010'] ?? 0), 'red', 2, 0],
+        ['manager', 'issue_due',          'Issue SEC-1004 is 2 day(s) overdue', 'Legacy HMI reachable from office VLAN', '?page=issue&id=' . (int) ($issues['SEC-1004'] ?? 0), 'orange', 5, 0],
+        ['manager', 'exception_expiring', 'Exception EXC-001 expires in 21 day(s)', 'USB · removable media', '?page=exceptions', 'orange', 9, 0],
+        ['admin',   'sop_review',         'SOP review due: ISMS-001', 'Information Security Policy · review in 14 day(s)', '?page=sop', 'blue', 26, 0],
+        ['analyst', 'issue_assigned',     'Issue SEC-1005 is assigned to you', 'Shared operator account on MES terminal 4', '?page=issue&id=' . (int) ($issues['SEC-1005'] ?? 0), 'blue', 30, 0],
+        ['viewer',  'sop_review',         'SOP review due: IT-001', 'Patch Management SOP · review in 28 day(s)', '?page=sop', 'blue', 50, 1],
+    ];
+
+    $st = $pdo->prepare('INSERT INTO notifications (user_id, kind, title, body, link, tone, read_at, created_at)
+                         VALUES (?,?,?,?,?,?,?, DATE_SUB(NOW(), INTERVAL ? HOUR))');
+
+    foreach ($rows as [$username, $kind, $title, $body, $link, $tone, $hours, $read]) {
+        $st->execute([
+            $users[$username] ?? null, $kind, $title, $body, $link, $tone,
+            $read ? date('Y-m-d H:i:s', time() - 3600) : null,
+            (int) $hours,
         ]);
     }
 }

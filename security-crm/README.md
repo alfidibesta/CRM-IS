@@ -256,6 +256,27 @@ uploads/             evidence files (random names, direct access denied)
 The layout is intentionally compact (13px base, dense tables) so a whole
 register or board fits on one screen.
 
+## Notifications
+
+Each account gets its own alerts, written by rules rather than by typing:
+
+| Rule | Who is told | When |
+| --- | --- | --- |
+| Issue assigned | the account whose `name` or `username` matches the issue owner | issue created, or its owner changed |
+| Critical issue | security managers and administrators | a Critical issue is created or raised to Critical |
+| Issue due | the issue owner | 3 days before `due_at`, then daily while overdue |
+| Exception expiring | managers, administrators and the owner | 30 days before `period_end`, then daily once expired |
+| SOP review due | managers and administrators | 30 days before `review_at`, then daily while overdue |
+
+The **Alerts** bell in the top bar shows the unread count and the latest eight; **Notifications**
+(`?page=notifications`) lists them with unread/all and type filters, a **Mark read** button per row and
+**Mark all read**. Opening an alert does not clear it, so "unread" keeps meaning unprocessed.
+
+Time-based rules run when a page loads, at most once every five minutes per session, and carry a
+date-stamped dedupe key — no cron job, and a second visit the same day adds nothing. Assignment names
+are matched to accounts by name or username; an issue owned by a name with no account notifies nobody,
+and you are never notified about a change you just made yourself.
+
 ## Audit trail
 
 Every change is recorded in `audit_log`: who acted, the role they held at that moment, the record
