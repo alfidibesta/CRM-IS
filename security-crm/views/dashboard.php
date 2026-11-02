@@ -210,6 +210,36 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
   </table>
 </section>
 
+<?php
+$auditRecent = can('page.audit')
+    ? $pdo->query('SELECT * FROM audit_log ORDER BY id DESC LIMIT 6')->fetchAll()
+    : [];
+?>
+<?php if ($auditRecent): ?>
+<section class="card">
+  <header class="card__head">
+    <h2>Audit trail</h2>
+    <a class="link" href="?page=audit">Open trail</a>
+  </header>
+  <table class="table table--tight">
+    <thead>
+      <tr><th>When</th><th>Actor</th><th>Event</th><th>Record</th></tr>
+    </thead>
+    <tbody>
+    <?php foreach ($auditRecent as $a): ?>
+      <?php $ats = strtotime((string) $a['created_at']); ?>
+      <tr>
+        <td class="nowrap mono"><?= $ats ? date('d M H:i', $ats) : '—' ?></td>
+        <td class="nowrap"><?= e($a['actor']) ?><span class="muted"> · <?= e(role_label((string) $a['role'])) ?></span></td>
+        <td><?= badge(audit_action_label((string) $a['action']), audit_action_tone((string) $a['action'])) ?></td>
+        <td><?= e($a['label']) ?: '<span class="muted">—</span>' ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+</section>
+<?php endif; ?>
+
 <?php if (can('page.exceptions') && $excList): ?>
 <section class="card">
   <header class="card__head">

@@ -146,9 +146,11 @@ php -S localhost:8000 router.php
 | `?page=template&id=N` | Fill in the placeholders, live document preview, download `.docx`, list of issue reports that use this form, edit the source (editors only) |
 | `?page=exceptions` | **EDLP exception register** — USB, websites, cameras, cloud apps…: adjustable categories, validity period with expiring/expired state, detail, justification, compensating control, category manager |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
+| `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters and a CSV export |
 
 Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
-(template), `?page=download&file=N` (evidence file).
+(template), `?page=download&file=N` (evidence file), `?page=audit&export=csv`
+(audit trail, following the active filter).
 
 ## Authority
 
@@ -163,6 +165,7 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Download files & export `.docx` | ✓ | ✓ | ✓ | ✓ |
+| Read the audit trail | ✓ | ✓ | — | ✓ |
 | Manage users, roles, passwords | ✓ | — | — | — |
 
 The matrix is rendered from `role_list()` / `permission_list()` in
@@ -252,6 +255,23 @@ uploads/             evidence files (random names, direct access denied)
 
 The layout is intentionally compact (13px base, dense tables) so a whole
 register or board fits on one screen.
+
+## Audit trail
+
+Every change is recorded in `audit_log`: who acted, the role they held at that moment, the record
+touched (`entity` + `entity_id`), a human label, the detail, the address and the client. The table is
+append-only — the application inserts and reads; nothing in it updates or deletes a row.
+
+Covered events: sign-in, sign-out, failed sign-in, lockout and address throttle, refused permission,
+issue create / update / status / report form / note / person / export, evidence upload / download /
+delete, task create / move / delete, template create / update / delete / download, exception and
+category create / update / delete, user create / update / password reset / delete, and trail exports.
+
+Open **Audit trail** in the sidebar — permission `page.audit`, held by administrator, security manager
+and auditor/viewer; an analyst generates history but does not read it. Filter by action, record type,
+actor, free text and date range; **Export CSV** writes the current filter as an audit pack; the
+dashboard shows the six most recent entries. Retention follows your database backup policy — the app
+never prunes the table, so archive it yourself if it grows large.
 
 ## Security notes
 

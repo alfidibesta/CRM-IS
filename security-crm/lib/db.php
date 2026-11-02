@@ -118,6 +118,25 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     INDEX idx_attempts_user (username, created_at)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS audit_log (
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    actor_id   INT NULL,
+    actor      VARCHAR(100) NOT NULL DEFAULT '',
+    role       VARCHAR(20)  NOT NULL DEFAULT '',
+    action     VARCHAR(40)  NOT NULL,
+    entity     VARCHAR(30)  NOT NULL DEFAULT '',
+    entity_id  INT NULL,
+    label      VARCHAR(200) NOT NULL DEFAULT '',
+    detail     VARCHAR(500) NOT NULL DEFAULT '',
+    ip         VARCHAR(45)  NOT NULL DEFAULT '',
+    agent      VARCHAR(120) NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_created (created_at),
+    INDEX idx_audit_actor (actor),
+    INDEX idx_audit_action (action),
+    INDEX idx_audit_entity (entity, entity_id)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS suspects (
     id           INT AUTO_INCREMENT PRIMARY KEY,
     issue_id     INT NOT NULL,
@@ -261,6 +280,58 @@ function seedIfEmpty(PDO $pdo): void
     seed_issue_extras($pdo);
     seed_exceptions($pdo);
     seed_activity($pdo);
+    seed_audit($pdo);
+}
+
+/**
+ * Sample trail entries so the audit page is not empty on a fresh install.
+ * Live entries are written by audit() as people use the app.
+ */
+function seed_audit(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM audit_log')->fetchColumn() > 0) {
+        return;
+    }
+
+    $issueId = $pdo->query('SELECT code, id FROM issues')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $tplId   = $pdo->query('SELECT code, id FROM templates')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $excId   = $pdo->query('SELECT code, id FROM exceptions')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $userId  = $pdo->query('SELECT username, id FROM users')->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    $rows = [
+        ['viewer',  'A. Pratama', 'viewer',  'auth.login',       'session',   'viewer',  'viewer',  'Auditor / Viewer signed in', 27],
+        ['manager', 'S. Wijaya',  'manager', 'issue.create',     'issue',     'SEC-1004', 'SEC-1004', 'IT Security · Critical · risk 20', 24],
+        ['analyst', 'D. Kusuma',  'analyst', 'issue.note',       'issue',     'SEC-1005', 'SEC-1005', 'Badge reader outage explained; individual accounts agreed with HR.', 21],
+        ['analyst', 'D. Kusuma',  'analyst', 'file.upload',      'file',      null,      'gate-camera-14.mp4', 'Log · 4 MB · issue #' . (int) ($issueId['SEC-1002'] ?? 0), 18],
+        ['manager', 'S. Wijaya',  'manager', 'issue.status',     'issue',     'SEC-1007', 'SEC-1007', 'Status In Progress to Resolved', 15],
+        ['manager', 'S. Wijaya',  'manager', 'exception.create', 'exception', 'EXC-001', 'EXC-001', 'USB · 2025-07-01 to 2026-06-30', 12],
+        ['analyst', 'D. Kusuma',  'analyst', 'task.move',        'task',      null,      'Re-verify firewall rules for HMI VLAN', 'review to in_progress', 9],
+        ['admin',   'R. Hartono', 'admin',   'user.update',      'user',      'viewer',  'viewer',  'Password reset by an administrator', 7],
+        ['admin',   'R. Hartono', 'admin',   'template.download', 'template', 'TPL-001', 'TPL-001', 'Downloaded Mutual Non-Disclosure Agreement (NDA)', 5],
+        ['manager', 'S. Wijaya',  'manager', 'auth.failed',      'session',   null,      'unknown.user', 'No such account', 3],
+        ['admin',   'R. Hartono', 'admin',   'issue.export',     'issue',     'SEC-1010', 'SEC-1010', 'Report exported as .docx', 2],
+        ['admin',   'R. Hartono', 'admin',   'auth.login',       'session',   'admin',   'admin',   'Administrator signed in', 1],
+    ];
+
+    $st = $pdo->prepare('INSERT INTO audit_log
+        (actor_id, actor, role, action, entity, entity_id, label, detail, ip, agent, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?, DATE_SUB(NOW(), INTERVAL ? HOUR))');
+
+    foreach ($rows as [$username, $actor, $role, $action, $entity, $key, $label, $detail, $hours]) {
+        $entityId = match ($entity) {
+            'issue'    => $issueId[$key] ?? null,
+            'template' => $tplId[$key] ?? null,
+            'exception' => $excId[$key] ?? null,
+            'user', 'session' => $userId[$key] ?? null,
+            default    => null,
+        };
+
+        $st->execute([
+            $userId[$username] ?? null, $actor, $role, $action, $entity, $entityId,
+            $label, $detail, '10.20.4.' . random_int(10, 60),
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Plant WS', (int) $hours,
+        ]);
+    }
 }
 
 function seed_users(PDO $pdo): void

@@ -11,6 +11,7 @@ $nav = [
     ['sop',       'SOP & Policy', 'blue', 'page.sop'],
     ['templates', 'Templates', 'neutral', 'page.templates'],
     ['exceptions', 'EDLP Exceptions', 'orange', 'page.exceptions'],
+    ['audit',     'Audit trail',  'neutral', 'page.audit'],
 ];
 
 $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Security' => 'orange'];

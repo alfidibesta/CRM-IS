@@ -1030,3 +1030,7 @@ ul, ol { padding: 0; list-style: none; }
   .content { padding: 12px; }
   .topbar { padding: 12px 14px; }
 }
+
+/* ---------------------------------------------------------- audit pager */
+.pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-top: 10px; }
+.pager > .muted { margin-right: auto; }

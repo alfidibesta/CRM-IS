@@ -40,6 +40,7 @@ set_exception_handler(function (Throwable $e): void {
 require __DIR__ . '/lib/helpers.php';
 require __DIR__ . '/lib/db.php';
 require __DIR__ . '/lib/auth.php';
+require __DIR__ . '/lib/audit.php';
 require __DIR__ . '/lib/uploads.php';
 require __DIR__ . '/lib/templates.php';
 require __DIR__ . '/lib/word.php';
@@ -101,8 +102,9 @@ try {
 }
 
 auth_boot($pdo);
+audit_boot($pdo);
 
-$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'download', 'doc', 'issue_doc'];
+$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'audit', 'download', 'doc', 'issue_doc'];
 
 /** POST target: ?page=X ( + id ) — validated against the page whitelist. */
 function back_to(string $back, int $id = 0): void
@@ -258,6 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $code  = 'SEC-' . $next;
             $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                 ->execute([$id, $u, 'created', "Reported {$code} as {$severity} severity."]);
+            audit('issue.create', 'issue', $id, $code, $title . ' · ' . $category . ' · ' . $severity . ' · risk ' . ($like * $imp));
             flash("Issue {$code} created.");
             back_to('issue', $id);
 
@@ -319,6 +322,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($status === $old['status'] && $severity === $old['severity'] && $newScore === (int) $old['risk_score']) {
                 $log->execute([$id, $u, 'field', 'Issue details updated by ' . $u . '.']);
             }
+
+            $changed = [];
+            if ($severity !== $old['severity']) {
+                $changed[] = "severity {$old['severity']} to {$severity}";
+            }
+            if ($newScore !== (int) $old['risk_score']) {
+                $changed[] = "risk {$old['risk_score']} to {$newScore}";
+            }
+            audit('issue.update', 'issue', $id, (string) $old['code'], $changed ? ucfirst(implode('; ', $changed)) : 'Fields saved');
+            if ($status !== $old['status']) {
+                audit('issue.status', 'issue', $id, (string) $old['code'], "Status {$old['status']} to {$status}");
+            }
             flash('Issue updated.');
             back_to('issue', $id);
 
@@ -327,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id     = (int) ($_POST['issue_id'] ?? 0);
             $status = in_array($_POST['status'] ?? '', ['Open', 'In Progress', 'Contained', 'Resolved'], true)
                 ? (string) $_POST['status'] : '';
-            $st = $pdo->prepare('SELECT status, closed_at FROM issues WHERE id = ?');
+            $st = $pdo->prepare('SELECT code, status, closed_at FROM issues WHERE id = ?');
             $st->execute([$id]);
             $old = $st->fetch();
             if (!$old || $status === '') {
@@ -339,6 +354,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute([$status, $closedAt, $id]);
                 $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                     ->execute([$id, $u, 'status', "Status changed from {$old['status']} to {$status}."]);
+                audit('issue.status', 'issue', $id, (string) $old['code'], "Status {$old['status']} to {$status} from the register");
                 flash("Status set to {$status}.");
             }
             back_to('issues');
@@ -392,6 +408,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? 'Report layout reset to the selected form template.'
                     : 'Report layout adjusted for this issue.']);
             }
+
+            $reportDetail = [];
+            if ($tplChanged) {
+                $reportDetail[] = $tplId > 0 ? 'form set to ' . $tplName : 'form template cleared';
+            }
+            if ($bodyChanged) {
+                $reportDetail[] = $body === null ? 'layout reset to the form' : 'layout adjusted';
+            }
+            audit('issue.report', 'issue', $id, (string) $old['code'], $reportDetail ? ucfirst(implode('; ', $reportDetail)) : 'Report form saved');
             flash('Report form saved.');
             back_to('issue', $id);
 
@@ -399,11 +424,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int) ($_POST['issue_id'] ?? 0);
             $note = trim($_POST['note'] ?? '');
             if ($note !== '') {
-                $st = $pdo->prepare('SELECT id FROM issues WHERE id = ?');
+                $st = $pdo->prepare('SELECT code FROM issues WHERE id = ?');
                 $st->execute([$id]);
-                if ($st->fetch()) {
+                $noteCode = (string) ($st->fetchColumn() ?: '');
+                if ($noteCode !== '') {
                     $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                         ->execute([$id, $u, 'note', mb_substr($note, 0, 400)]);
+                    audit('issue.note', 'issue', $id, $noteCode, mb_substr($note, 0, 160));
                     flash('Note added to the activity log.');
                 }
             }
@@ -427,6 +454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                 $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                     ->execute([$id, $u, 'suspect', "Person added to the report: {$name} ({$involvement})."]);
+                audit('issue.suspect.add', 'issue', $id, $name, 'Added as ' . $involvement);
                 flash('Person added to the report.');
             }
             back_to('issue', $id);
@@ -441,6 +469,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('DELETE FROM suspects WHERE id = ? AND issue_id = ?')->execute([$sid, $id]);
                 $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                     ->execute([$id, $u, 'suspect', "Person removed from the report: {$name}."]);
+                audit('issue.suspect.remove', 'issue', $id, $name, 'Removed from the report');
                 flash('Person removed.');
             }
             back_to('issue', $id);
@@ -459,6 +488,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $id, $res['name'], $res['stored'], $res['ext'], $res['mime'],
                     $res['size'], $kind, trim($_POST['note'] ?? ''), $u,
                 ]);
+            audit('file.upload', 'file', (int) $pdo->lastInsertId(), (string) $res['name'],
+                $kind . ' · ' . human_size((int) $res['size']) . ' · issue #' . $id);
             $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                 ->execute([$id, $u, 'file', "Evidence uploaded: {$res['name']} ({$kind})."]);
             flash("Evidence uploaded: {$res['name']}.");
@@ -478,6 +509,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('DELETE FROM issue_files WHERE id = ?')->execute([$fid]);
                 $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
                     ->execute([$id, $u, 'file', "Evidence removed: {$row['original_name']}."]);
+                audit('file.delete', 'file', $fid, (string) $row['original_name'], 'Removed from issue #' . $id);
                 flash('File removed.');
             }
             back_to('issue', $id);
@@ -518,6 +550,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     clamp($_POST['approved_by'] ?? '', 100),
                     clamp($_POST['ref_no'] ?? '', 40),
                 ]);
+            audit('exception.create', 'exception', (int) $pdo->lastInsertId(), $code, $category . ' · ' . ($end ?? 'no end date'));
             flash("Exception {$code} added for {$category}.");
             back_to('exceptions');
 
@@ -562,6 +595,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $eid,
                 ]);
 
+            audit('exception.update', 'exception', $eid, (string) $old['code'], 'Period ' . $start . ' to ' . ($end ?? '—') . ' · ' . $category);
             flash("Exception {$old['code']} updated.");
             back_to('exceptions');
 
@@ -572,6 +606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $code = (string) $st->fetchColumn();
             if ($code !== '') {
                 $pdo->prepare('DELETE FROM exceptions WHERE id = ?')->execute([$eid]);
+                audit('exception.delete', 'exception', $eid, $code, 'Removed from the register');
                 flash("Exception {$code} deleted.");
             }
             back_to('exceptions');
@@ -595,6 +630,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     in_array($_POST['tone'] ?? '', ['red', 'blue', 'orange', 'green', 'neutral'], true) ? $_POST['tone'] : 'neutral',
                     $sort,
                 ]);
+            audit('exception.category.create', 'exception_category', (int) $pdo->lastInsertId(), $name, 'Added to the register');
             flash("Category {$name} added.");
             back_to('exceptions');
 
@@ -626,6 +662,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute([$name, $cat['name']]);
             }
             $pdo->commit();
+            audit('exception.category.update', 'exception_category', $cid, $name,
+                $name !== (string) $cat['name'] ? 'Renamed from ' . $cat['name'] : 'Tone or order saved');
             flash("Category {$name} saved.");
             back_to('exceptions');
 
@@ -646,6 +684,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['form_error'] = 'Keep at least one category.';
             } else {
                 $pdo->prepare('DELETE FROM exception_categories WHERE id = ?')->execute([$cid]);
+                audit('exception.category.delete', 'exception_category', $cid, $name, 'No exceptions used it');
                 flash("Category {$name} deleted.");
             }
             back_to('exceptions');
@@ -666,6 +705,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (int) ($_POST['issue_id'] ?? 0) ?: null,
                     (int) $max->fetchColumn() + 1,
                 ]);
+            audit('task.create', 'task', (int) $pdo->lastInsertId(), clamp($_POST['title'] ?? '', 200),
+                'Added to ' . str_replace('_', ' ', $col));
             flash('Task added to the board.');
             back_to($back, $backId);
 
@@ -674,6 +715,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $taskId   = (int) ($_POST['task_id'] ?? 0);
             $toColumn = (string) ($_POST['column'] ?? '');
             $toIndex  = (int) ($_POST['index'] ?? 0);
+
+            $tst = $pdo->prepare('SELECT title, column_key FROM tasks WHERE id = ?');
+            $tst->execute([$taskId]);
+            $taskRow = $tst->fetch() ?: ['title' => '', 'column_key' => ''];
 
             if (!in_array($toColumn, ['backlog', 'planned', 'in_progress', 'review', 'done'], true)) {
                 echo json_encode(['ok' => false, 'error' => 'bad column']);
@@ -695,12 +740,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $pdo->commit();
 
+            audit('task.move', 'task', $taskId, (string) $taskRow['title'],
+                ($taskRow['column_key'] !== '' ? $taskRow['column_key'] . ' to ' : '') . $toColumn);
+
             echo json_encode(['ok' => true]);
             exit;
 
         case 'delete_task':
             $tid = (int) ($_POST['task_id'] ?? 0);
+            $tst = $pdo->prepare('SELECT title FROM tasks WHERE id = ?');
+            $tst->execute([$tid]);
+            $taskTitle = (string) ($tst->fetchColumn() ?: '');
             $pdo->prepare('DELETE FROM tasks WHERE id = ?')->execute([$tid]);
+            audit('task.delete', 'task', $tid, $taskTitle, 'Removed from the board');
             flash('Task deleted.');
             back_to($back, $backId);
 
@@ -724,11 +776,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     mb_substr((string) ($_POST['body'] ?? ''), 0, 60000),
                 ]);
             $tid = (int) $pdo->lastInsertId();
+            audit('template.create', 'template', $tid, $code, clamp($_POST['name'] ?? 'Untitled form', 160));
             flash('Template created.');
             back_to('template', $tid);
 
         case 'update_template':
             $tid = (int) ($_POST['template_id'] ?? 0);
+            $tst = $pdo->prepare('SELECT code, name FROM templates WHERE id = ?');
+            $tst->execute([$tid]);
+            $tplOld = $tst->fetch() ?: ['code' => '', 'name' => ''];
             $pdo->prepare('UPDATE templates SET name=?, category=?, version=?, owner=?, description=?, body=? WHERE id=?')
                 ->execute([
                     clamp($_POST['name'] ?? '', 160) ?: 'Untitled form',
@@ -739,12 +795,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     mb_substr((string) ($_POST['body'] ?? ''), 0, 60000),
                     $tid,
                 ]);
+            audit('template.update', 'template', $tid, (string) $tplOld['code'], (string) $tplOld['name']);
             flash('Template saved.');
             back_to('template', $tid);
 
         case 'delete_template':
             $tid = (int) ($_POST['template_id'] ?? 0);
+            $tst = $pdo->prepare('SELECT code, name FROM templates WHERE id = ?');
+            $tst->execute([$tid]);
+            $tplGone = $tst->fetch() ?: ['code' => '', 'name' => ''];            
             $pdo->prepare('DELETE FROM templates WHERE id = ?')->execute([$tid]);
+            audit('template.delete', 'template', $tid, (string) $tplGone['code'], (string) $tplGone['name']);
             flash('Template deleted.');
             back_to('templates');
 
@@ -777,12 +838,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $role,
                     password_hash($password, PASSWORD_DEFAULT),
                 ]);
+            audit('user.create', 'user', (int) $pdo->lastInsertId(), $username, 'Role ' . $role);
             flash("User {$username} created with the {$role} role.");
             back_to('users');
 
         case 'update_user':
             $uid = (int) ($_POST['user_id'] ?? 0);
             $me  = (int) (current_user()['id'] ?? 0);
+            $ust = $pdo->prepare('SELECT username, role, active FROM users WHERE id = ?');
+            $ust->execute([$uid]);
+            $before = $ust->fetch() ?: ['username' => '', 'role' => '', 'active' => 0];
             $role = in_array($_POST['role'] ?? '', array_keys(role_list()), true) ? $_POST['role'] : 'viewer';
             if ($uid === $me) {
                 $role = current_user()['role']; // nobody demotes or locks themselves out
@@ -795,6 +860,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('UPDATE users SET name=?, email=?, role=?, active=? WHERE id=?')
                 ->execute([clamp($_POST['name'] ?? '', 100), clamp($_POST['email'] ?? '', 120), $role, $active, $uid]);
 
+            $acct = [];
+            if ((string) $before['role'] !== '' && (string) $before['role'] !== $role) {
+                $acct[] = "role {$before['role']} to {$role}";
+            }
+            if ((int) $before['active'] !== $active) {
+                $acct[] = $active ? 'account enabled' : 'account disabled';
+            }
+            audit('user.update', 'user', $uid, (string) ($before['username'] ?: ('#' . $uid)),
+                $acct ? ucfirst(implode('; ', $acct)) : 'Profile saved');
+
             $password = (string) ($_POST['password'] ?? '');
             if ($password !== '') {
                 if (strlen($password) < 8) {
@@ -803,6 +878,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?')
                         ->execute([password_hash($password, PASSWORD_DEFAULT), $uid]);
                     $pdo->prepare('UPDATE users SET failed_attempts=0, locked_until=NULL WHERE id=?')->execute([$uid]);
+                    audit('user.update', 'user', $uid, (string) ($before['username'] ?: ('#' . $uid)), 'Password reset by an administrator');
                     flash('User updated and password reset.');
                 }
             } else {
@@ -826,6 +902,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['form_error'] = 'The last active administrator cannot be deleted.';
             } else {
                 $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$uid]);
+                audit('user.delete', 'user', $uid, (string) $victim['username'], 'Role ' . $victim['role']);
                 flash("User {$victim['username']} deleted.");
             }
             back_to('users');
@@ -854,6 +931,38 @@ if ($page === 'login') {
 require_login();
 require_permission(page_permission($page));
 
+/* ------------------------------------------------------------- exports */
+
+if ($page === 'audit' && ($_GET['export'] ?? '') === 'csv') {
+    $f    = audit_filters($_GET);
+    $rows = audit_search($pdo, $f, 1, 5000)['rows'];
+
+    audit('audit.export', 'session', null, 'Audit trail', count($rows) . ' entries exported as CSV');
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="audit-trail-' . date('Ymd-Hi') . '.csv"');
+    header('X-Content-Type-Options: nosniff');
+
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['When', 'Actor', 'Role', 'Action', 'Record type', 'Record ID', 'Reference', 'Detail', 'IP', 'Client']);
+    foreach ($rows as $r) {
+        fputcsv($out, [
+            $r['created_at'],
+            $r['actor'],
+            $r['role'],
+            audit_action_label((string) $r['action']),
+            audit_entity_label((string) $r['entity']),
+            $r['entity_id'],
+            $r['label'],
+            $r['detail'],
+            $r['ip'],
+            $r['agent'],
+        ]);
+    }
+    fclose($out);
+    exit;
+}
+
 /* ------------------------------------------------------------ downloads */
 
 if ($page === 'download') {
@@ -877,6 +986,9 @@ if ($page === 'download') {
         'zip' => 'application/zip',
     ];
     $dl = $row['ext'] !== '' && ($row['ext'] === 'png' || $row['ext'] === 'jpg' || $row['ext'] === 'jpeg' || $row['ext'] === 'gif' || $row['ext'] === 'webp') && isset($_GET['inline']);
+
+    audit('file.download', 'file', (int) $row['id'], (string) $row['original_name'],
+        'Evidence · ' . human_size((int) $row['size_bytes']));
 
     header('Content-Type: ' . ($types[$row['ext']] ?? 'application/octet-stream'));
     header('Content-Length: ' . filesize($path));
@@ -908,6 +1020,7 @@ if ($page === 'doc') {
     $bytes = docx_package($blocks, $fill, ['title' => $tpl['name'], 'creator' => 'SecOps CRM · ' . current_user_name()]);
 
     $pdo->prepare('UPDATE templates SET downloads = downloads + 1 WHERE id = ?')->execute([(int) $tpl['id']]);
+    audit('template.download', 'template', (int) $tpl['id'], (string) $tpl['code'], 'Downloaded ' . $tpl['name']);
     docx_send($tpl['code'] . '-' . $tpl['name'] . '.docx', $bytes);
 }
 
@@ -937,6 +1050,8 @@ if ($page === 'issue_doc') {
     $form = issue_report_template($pdo, $issue);
     $fill = issue_report_fill($issue, $ctx);
 
+    audit('issue.export', 'issue', (int) $issue['id'], (string) $issue['code'], 'Report exported as .docx');
+
     docx_send($issue['code'] . '-issue-report.docx',
         docx_package(issue_report_blocks($issue, $ctx, $form), $fill, [
             'title'   => $issue['code'] . ' — Information Security Issue Report',
@@ -956,6 +1071,7 @@ $titles = [
     'template'  => ['Template Detail', 'Preview, fill in and download as .docx'],
     'exceptions' => ['EDLP Exceptions', 'Approved deviations for USB, websites, cameras and more'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
+    'audit'     => ['Audit Trail', 'Every recorded change, who made it and from where'],
 ];
 
 // Resolve the record before any output: a missing id must answer 404, not 200.

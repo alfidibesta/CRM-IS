@@ -3,7 +3,8 @@
 -- every table by itself on the first request, so importing this file is optional.
 --
 -- Tables: sops, issues (tags + report form), tasks, users, suspects, issue_files,
---         issue_events, templates, exception_categories, exceptions, login_attempts
+--         issue_events, templates, exception_categories, exceptions, login_attempts,
+--         audit_log
 -- Demo sign-in: admin / Admin@123 (see README.md for the other roles).
 
 CREATE DATABASE IF NOT EXISTS `security_crm` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -232,6 +233,25 @@ CREATE TABLE `users` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+CREATE TABLE `audit_log` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `actor_id` int(11) DEFAULT NULL,
+  `actor` varchar(100) NOT NULL DEFAULT '',
+  `role` varchar(20) NOT NULL DEFAULT '',
+  `action` varchar(40) NOT NULL,
+  `entity` varchar(30) NOT NULL DEFAULT '',
+  `entity_id` int(11) DEFAULT NULL,
+  `label` varchar(200) NOT NULL DEFAULT '',
+  `detail` varchar(500) NOT NULL DEFAULT '',
+  `ip` varchar(45) NOT NULL DEFAULT '',
+  `agent` varchar(120) NOT NULL DEFAULT '',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_created` (`created_at`),
+  KEY `idx_audit_actor` (`actor`),
+  KEY `idx_audit_action` (`action`),
+  KEY `idx_audit_entity` (`entity`,`entity_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

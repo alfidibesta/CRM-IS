@@ -19,6 +19,7 @@ function permission_list(): array
         'page.templates' => 'Form template library',
         'page.exceptions' => 'EDLP exception register',
         'page.users'     => 'Users & authority',
+        'page.audit'     => 'Audit trail (read-only)',
         'issue.create'   => 'Report a new issue',
         'issue.update'   => 'Edit issue fields, status and risk',
         'issue.note'     => 'Add notes to an issue',
@@ -52,7 +53,7 @@ function role_list(): array
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
                 'task.create', 'task.move', 'task.delete', 'template.edit',
-                'exception.manage', 'exception.category', 'file.download',
+                'exception.manage', 'exception.category', 'file.download', 'page.audit',
             ],
         ],
         'analyst' => [
@@ -70,7 +71,7 @@ function role_list(): array
             'hint'  => 'Read-only: review, download and export',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
-                'page.exceptions', 'file.download', 'issue.export',
+                'page.exceptions', 'file.download', 'issue.export', 'page.audit',
             ],
         ],
     ];
@@ -101,6 +102,7 @@ function page_permission(string $page): string
         'doc'        => 'page.templates',
         'exceptions' => 'page.exceptions',
         'users'      => 'page.users',
+        'audit'      => 'page.audit',
     ];
     return $map[$page] ?? 'page.dashboard';
 }
@@ -180,6 +182,7 @@ function attempt_login(PDO $pdo, string $username, string $password): array
     $th->execute([$ip]);
     if ((int) $th->fetchColumn() >= 25) {
         $log->execute([$username, $ip, 0]);
+        audit('auth.blocked', 'session', null, $username, 'Address throttle: 25 failed sign-ins in 15 minutes', $username);
         return ['ok' => false, 'error' => 'Too many failed attempts from this address. Wait 15 minutes and try again.'];
     }
 
@@ -189,15 +192,18 @@ function attempt_login(PDO $pdo, string $username, string $password): array
 
     if (!$u) {
         $log->execute([$username, $ip, 0]);
+        audit('auth.failed', 'session', null, $username, 'No such account', $username);
         return ['ok' => false, 'error' => 'Username or password is incorrect.'];
     }
     if (!(int) $u['active']) {
         $log->execute([$username, $ip, 0]);
+        audit('auth.failed', 'session', (int) $u['id'], (string) $u['username'], 'Account deactivated', (string) $u['username'], (string) $u['role']);
         return ['ok' => false, 'error' => 'This account is deactivated. Ask an administrator to re-enable it.'];
     }
     if ($u['locked_until'] !== null && strtotime((string) $u['locked_until']) > time()) {
         $mins = (int) ceil((strtotime((string) $u['locked_until']) - time()) / 60);
         $log->execute([$username, $ip, 0]);
+        audit('auth.locked', 'session', (int) $u['id'], (string) $u['username'], "Sign-in refused while locked ({$mins} minute(s) left)", (string) $u['username'], (string) $u['role']);
         return ['ok' => false, 'error' => "Too many failed attempts. Locked for another {$mins} minute(s)."];
     }
 
@@ -207,12 +213,20 @@ function attempt_login(PDO $pdo, string $username, string $password): array
         $pdo->prepare('UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?')
             ->execute([$fails, $lock, (int) $u['id']]);
         $log->execute([$username, $ip, 0]);
+        if ($lock !== null) {
+            audit('auth.locked', 'session', (int) $u['id'], (string) $u['username'], 'Locked for 15 minutes after 5 failed attempts', (string) $u['username'], (string) $u['role']);
+        } else {
+            audit('auth.failed', 'session', (int) $u['id'], (string) $u['username'], "Wrong password (attempt {$fails} of 5)", (string) $u['username'], (string) $u['role']);
+        }
         return ['ok' => false, 'error' => 'Username or password is incorrect.'];
     }
 
     $pdo->prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login = NOW() WHERE id = ?')
         ->execute([(int) $u['id']]);
     $log->execute([$username, $ip, 1]);
+
+    audit('auth.login', 'session', (int) $u['id'], (string) $u['username'],
+        role_label((string) $u['role']) . ' signed in', (string) $u['name'], (string) $u['role']);
 
     session_regenerate_id(true); // prevent session fixation
     $_SESSION['user_id'] = (int) $u['id'];
@@ -223,6 +237,11 @@ function attempt_login(PDO $pdo, string $username, string $password): array
 
 function logout_user(): void
 {
+    if (is_logged_in()) {
+        $u = current_user();
+        audit('auth.logout', 'session', (int) ($u['id'] ?? 0), (string) ($u['username'] ?? ''), 'Signed out');
+    }
+
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
         $p = session_get_cookie_params();
@@ -253,6 +272,9 @@ function forbidden_page(string $perm): void
     $role  = role_label(current_user()['role'] ?? '');
     $back  = isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : '?page=dashboard';
     $back  = preg_replace('/[^a-zA-Z0-9_\-\?=&%.\/:]/', '', $back) ?: '?page=dashboard';
+    if (is_logged_in()) {
+        audit('access.denied', 'session', null, $label, 'Blocked for ' . $role . ' on ?page=' . (string) ($_GET['page'] ?? ''));
+    }
     $here  = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
     $r     = htmlspecialchars($role, ENT_QUOTES, 'UTF-8');
     $b     = htmlspecialchars($back, ENT_QUOTES, 'UTF-8');

@@ -15,6 +15,7 @@ require __DIR__ . '/../lib/word.php';
 require __DIR__ . '/../lib/templates.php';
 require __DIR__ . '/../lib/report.php';
 require __DIR__ . '/../lib/uploads.php';
+require __DIR__ . '/../lib/audit.php';
 
 $pass = 0;
 $fail = 0;
@@ -87,6 +88,32 @@ ck('fill tags', $fill['TAGS'], 'a, b');
 /* --------------------------------------------------------------- uploads */
 ck('upload limit sane', upload_limit_bytes() > 0 && upload_limit_bytes() <= UPLOAD_MAX_BYTES, true);
 ck('human size', human_size(1048576), '1 MB');
+
+/* ------------------------------------------------------------ audit trail */
+ck('audit label', audit_action_label('issue.create'), 'Issue created');
+ck('audit label falls back', audit_action_label('nope'), 'nope');
+ck('audit tone', audit_action_tone('access.denied'), 'red');
+ck('audit tone default', audit_action_tone('nope'), 'neutral');
+ck('audit entity label', audit_entity_label('exception_category'), 'Exception category');
+ck('audit record url', audit_record_url(['entity' => 'issue', 'entity_id' => 7]), '?page=issue&id=7');
+ck('audit record url none', audit_record_url(['entity' => 'session', 'entity_id' => null]), '');
+
+$af = audit_filters(['q' => '  SEC-1 ', 'action' => 'issue.create', 'entity' => 'issue', 'actor' => 'R. H', 'from' => '2026-01-02', 'to' => 'junk']);
+ck('audit filters q', $af['q'], 'SEC-1');
+ck('audit filters action', $af['action'], 'issue.create');
+ck('audit filters entity', $af['entity'], 'issue');
+ck('audit filters date', $af['from'], '2026-01-02');
+ck('audit filters junk date', $af['to'], '');
+ck('audit filters unknown action', audit_filters(['action' => 'rm -rf'])['action'], '');
+
+ck('audit where none', audit_where(audit_filters([]))[0], '');
+[, $wargs] = audit_where(audit_filters(['q' => 'x', 'actor' => 'sam', 'action' => 'auth.login']));
+ck('audit where args', $wargs, ['%x%', '%x%', '%x%', 'auth.login', '%sam%']);
+ck('audit without pdo is silent', (static function (): bool {
+    unset($GLOBALS['audit_pdo']);
+    audit('issue.note');
+    return true;
+})(), true);
 
 echo $fail === 0
     ? "OK — {$pass} checks passed\n"
