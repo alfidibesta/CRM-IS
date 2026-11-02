@@ -23,9 +23,9 @@ Anything from Laragon 4 up works: **Apache 2.4** + **MySQL 8 / MariaDB** +
 
 ### 1. Copy the app into `www`
 
-The PHP app lives in the **`security-crm`** folder of this repository — the repo
-root holds an unrelated starter front end, so copy only that folder. Menu →
-**www** opens Laragon's web root; you should end up with:
+The PHP app is the **`security-crm`** folder. Copy that folder (or the whole
+repository) into Laragon's web root; Menu → **www** opens it. You should end up
+with:
 
 ```
 C:\laragon\www\security-crm\index.php

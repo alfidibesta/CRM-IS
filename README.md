@@ -54,10 +54,8 @@ not used; Word files are built by a small OOXML writer in `lib/word.php`.
 ## Repository layout
 
 ```
-security-crm/     the application — see security-crm/README.md
-src/  index.html  an unrelated Vite + Freebuff CRM starter that shipped with
-package.json      this project; it is not used by the PHP app and can be
-deploy.json       deleted if you only want Security CRM.
+security-crm/   the whole application — see security-crm/README.md
+README.md       this page
 ```
 
 ## Security
