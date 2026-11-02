@@ -176,6 +176,14 @@ function tag_normalise(string $raw): string
 /** Every tag in use, for the picker and the register filter. */
 function known_tags(PDO $pdo): array
 {
+    // Read once per request: the page header, the register filter and the issue
+    // form all ask for it, and every write path redirects before rendering.
+    static $cache = [];
+    $key = spl_object_id($pdo);
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
     $out = [];
     foreach ($pdo->query("SELECT tags FROM issues WHERE tags <> ''")->fetchAll(PDO::FETCH_COLUMN) as $raw) {
         foreach (tag_split((string) $raw) as $t) {
@@ -183,7 +191,8 @@ function known_tags(PDO $pdo): array
         }
     }
     ksort($out);
-    return array_values($out);
+
+    return $cache[$key] = array_values($out);
 }
 
 /** Tag chips linking to the filtered register. */

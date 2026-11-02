@@ -273,3 +273,25 @@ function issue_report_blocks(array $issue, array $ctx = [], ?array $tpl = null):
 
     return $b;
 }
+
+/**
+ * Related rows for one issue report: suspects, evidence, tasks and activity.
+ *
+ * Shared by the detail page and the Word export so the two cannot drift.
+ * Events come oldest-first; the detail page reverses them for display.
+ */
+function issue_report_context(PDO $pdo, int $issueId): array
+{
+    $fetch = static function (string $sql) use ($pdo, $issueId): array {
+        $st = $pdo->prepare($sql);
+        $st->execute([$issueId]);
+        return $st->fetchAll();
+    };
+
+    return [
+        'suspects' => $fetch('SELECT * FROM suspects WHERE issue_id = ? ORDER BY FIELD(involvement,\'Primary\',\'Accomplice\',\'Witness\',\'Victim\',\'Unknown\'), id'),
+        'files'    => $fetch('SELECT * FROM issue_files WHERE issue_id = ? ORDER BY id'),
+        'tasks'    => $fetch('SELECT * FROM tasks WHERE issue_id = ? ORDER BY FIELD(column_key,\'in_progress\',\'review\',\'planned\',\'backlog\',\'done\'), position'),
+        'events'   => $fetch('SELECT * FROM issue_events WHERE issue_id = ? ORDER BY created_at, id'),
+    ];
+}

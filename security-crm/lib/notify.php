@@ -22,7 +22,7 @@ function notify_boot(PDO $pdo): void
 /** Kind catalogue: key => [label, tone]. */
 function notification_kinds(): array
 {
-    return [
+    static $kinds = [
         'issue_assigned'      => ['Assigned to you', 'blue'],
         'issue_critical'      => ['Critical issue', 'red'],
         'issue_due'           => ['Issue due', 'orange'],
@@ -30,6 +30,8 @@ function notification_kinds(): array
         'exception_expired'   => ['Exception expired', 'red'],
         'sop_review'          => ['SOP review due', 'blue'],
     ];
+
+    return $kinds;
 }
 
 function notification_label(string $kind): string
@@ -75,10 +77,22 @@ function notification_user_for_name(PDO $pdo, string $name): int
     if ($name === '') {
         return 0;
     }
-    $st = $pdo->prepare('SELECT id FROM users WHERE active = 1 AND (LOWER(name) = LOWER(?) OR LOWER(username) = LOWER(?)) LIMIT 1');
-    $st->execute([$name, $name]);
 
-    return (int) ($st->fetchColumn() ?: 0);
+    // One lookup per request instead of one per row; first match wins, which is
+    // what the old LIMIT 1 query did when two accounts shared a name.
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        foreach ($pdo->query('SELECT id, name, username FROM users WHERE active = 1')->fetchAll() as $u) {
+            foreach ([mb_strtolower((string) $u['name']), mb_strtolower((string) $u['username'])] as $key) {
+                if ($key !== '' && !isset($map[$key])) {
+                    $map[$key] = (int) $u['id'];
+                }
+            }
+        }
+    }
+
+    return $map[mb_strtolower($name)] ?? 0;
 }
 
 /**
@@ -119,12 +133,24 @@ function notify_roles(array $roles, string $kind, string $title, string $body = 
     if (!$pdo instanceof PDO || !$roles) {
         return;
     }
+    foreach (notify_role_ids($pdo, $roles) as $id) {
+        notify($id, $kind, $title, $body, $link, $dedupe);
+    }
+}
+
+/** Active account ids holding any of the given roles, queried once per request. */
+function notify_role_ids(PDO $pdo, array $roles): array
+{
+    static $cache = [];
+    $key = implode('|', $roles);
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
     $in = implode(',', array_fill(0, count($roles), '?'));
     $st = $pdo->prepare("SELECT id FROM users WHERE active = 1 AND role IN ($in)");
-    $st->execute($roles);
-    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $id) {
-        notify((int) $id, $kind, $title, $body, $link, $dedupe);
-    }
+    $st->execute(array_values($roles));
+
+    return $cache[$key] = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
 }
 
 /** "Issue SEC-1004 is yours now" — skipped when you assigned it to yourself. */

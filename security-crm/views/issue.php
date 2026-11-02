@@ -14,16 +14,15 @@ if (!$issue) {
     return;
 }
 
-$fetch = function (string $sql, array $args = []) use ($pdo): array {
-    $s = $pdo->prepare($sql);
-    $s->execute($args);
-    return $s->fetchAll();
-};
+// Shared with the Word export (lib/report.php) so both read the same rows.
+$ctx      = issue_report_context($pdo, $id);
+$suspects = $ctx['suspects'];
+$files    = $ctx['files'];
+$events   = array_reverse($ctx['events']); // the report lists newest first
+$tasks    = $ctx['tasks'];
 
-$suspects = $fetch('SELECT * FROM suspects WHERE issue_id = ? ORDER BY FIELD(involvement,\'Primary\',\'Accomplice\',\'Witness\',\'Victim\',\'Unknown\'), id', [$id]);
-$files    = $fetch('SELECT * FROM issue_files WHERE issue_id = ? ORDER BY id', [$id]);
-$events   = $fetch('SELECT * FROM issue_events WHERE issue_id = ? ORDER BY created_at DESC, id DESC', [$id]);
-$tasks    = $fetch('SELECT * FROM tasks WHERE issue_id = ? ORDER BY FIELD(column_key,\'in_progress\',\'review\',\'planned\',\'backlog\',\'done\'), position', [$id]);
+$fileCount    = count($files);
+$suspectCount = count($suspects);
 
 $score    = (int) $issue['risk_score'];
 [$rating] = risk_rating($score);
@@ -73,7 +72,7 @@ $allTags    = known_tags($pdo);
       <div><dt>Reported</dt><dd><?= fmt_date($issue['reported_at']) ?> by <?= e($issue['reported_by']) ?: '—' ?></dd></div>
       <div><dt>Target close</dt><dd><?= fmt_date($issue['due_at']) ?></dd></div>
       <div><dt>Reviewed by</dt><dd><?= e($issue['reviewed_by']) ?: '—' ?></dd></div>
-      <div><dt>Attachments</dt><dd><?= count($files) ?> file<?= count($files) === 1 ? '' : 's' ?> · <?= count($suspects) ?> person<?= count($suspects) === 1 ? '' : 's' ?></dd></div>
+      <div><dt>Attachments</dt><dd><?= $fileCount ?> file<?= $fileCount === 1 ? '' : 's' ?> · <?= $suspectCount ?> person<?= $suspectCount === 1 ? '' : 's' ?></dd></div>
     </dl>
   </div>
 
@@ -356,7 +355,7 @@ $allTags    = known_tags($pdo);
   <section class="card">
     <header class="card__head">
       <h2>3 · Persons involved</h2>
-      <span class="muted"><?= count($suspects) ?> record<?= count($suspects) === 1 ? '' : 's' ?></span>
+      <span class="muted"><?= $suspectCount ?> record<?= $suspectCount === 1 ? '' : 's' ?></span>
     </header>
 
     <?php if (!$suspects): ?>
@@ -448,7 +447,7 @@ $allTags    = known_tags($pdo);
   <section class="card">
     <header class="card__head">
       <h2>4 · Evidence &amp; attachments</h2>
-      <span class="muted"><?= count($files) ?> file<?= count($files) === 1 ? '' : 's' ?></span>
+      <span class="muted"><?= $fileCount ?> file<?= $fileCount === 1 ? '' : 's' ?></span>
     </header>
 
     <?php if ($files): ?>

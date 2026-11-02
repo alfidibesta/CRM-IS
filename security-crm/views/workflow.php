@@ -29,7 +29,8 @@ $done = count($byCol['done'] ?? []);
 $wip  = count($byCol['in_progress'] ?? []);
 $review = count($byCol['review'] ?? []);
 $total = count($tasks) ?: 1;
-$overdue = count(array_filter($tasks, fn($t) => $t['due_at'] && $t['due_at'] < date('Y-m-d') && $t['column_key'] !== 'done'));
+$today = date('Y-m-d');
+$overdue = count(array_filter($tasks, fn($t) => $t['due_at'] && $t['due_at'] < $today && $t['column_key'] !== 'done'));
 ?>
 
 <section class="grid grid--stats">
@@ -136,7 +137,7 @@ $overdue = count(array_filter($tasks, fn($t) => $t['due_at'] && $t['due_at'] < d
             <?php endif; ?>
             <footer class="tcard__foot">
               <span class="avatar"><?= e($t['owner'] ? strtoupper(preg_replace('/\s+/', '', mb_substr($t['owner'], 0, 2))) : '–') ?></span>
-              <span class="muted <?= $t['due_at'] && $t['due_at'] < date('Y-m-d') && $t['column_key'] !== 'done' ? 'text-red' : '' ?>">
+              <span class="muted <?= $t['due_at'] && $t['due_at'] < $today && $t['column_key'] !== 'done' ? 'text-red' : '' ?>">
                 <?= $t['due_at'] ? 'due ' . date('d M', strtotime($t['due_at'])) : 'no date' ?>
               </span>
             </footer>

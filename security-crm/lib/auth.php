@@ -11,7 +11,7 @@ declare(strict_types=1);
 /** Permission catalogue: key => human label (drives the authority matrix page). */
 function permission_list(): array
 {
-    return [
+    static $list = [
         'page.dashboard' => 'Overview dashboard',
         'page.sop'       => 'SOP & policy library',
         'page.workflow'  => 'Workflow board',
@@ -35,12 +35,14 @@ function permission_list(): array
         'file.download'  => 'Download attached files',
         'user.manage'    => 'Manage users, roles and passwords',
     ];
+
+    return $list;
 }
 
 /** Role catalogue: key => label, description, permission list. */
 function role_list(): array
 {
-    return [
+    static $list = [
         'admin' => [
             'label' => 'Administrator',
             'hint'  => 'Full control, including users and authority',
@@ -75,6 +77,8 @@ function role_list(): array
             ],
         ],
     ];
+
+    return $list;
 }
 
 function role_label(string $role): string

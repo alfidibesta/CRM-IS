@@ -2,9 +2,9 @@
 -- Generated from a freshly seeded install. The app also creates and upgrades
 -- every table by itself on the first request, so importing this file is optional.
 --
--- Tables: sops, issues (tags + report form), tasks, users, suspects, issue_files,
---         issue_events, templates, exception_categories, exceptions, login_attempts,
---         audit_log
+-- Tables: schema_meta, sops, issues (tags + report form), tasks, users, suspects,
+--         issue_files, issue_events, templates, exception_categories, exceptions,
+--         login_attempts, audit_log, notifications
 -- Demo sign-in: admin / Admin@123 (see README.md for the other roles).
 
 CREATE DATABASE IF NOT EXISTS `security_crm` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -19,6 +19,12 @@ USE `security_crm`;
 /*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `schema_meta` (
+  `id` int(11) NOT NULL,
+  `version` int(11) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `exception_categories` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(60) NOT NULL,
@@ -52,7 +58,8 @@ CREATE TABLE `exceptions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
   KEY `idx_exc_period` (`period_end`),
-  KEY `idx_exc_status` (`status`)
+  KEY `idx_exc_status` (`status`),
+  KEY `idx_exc_category` (`category`)
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -123,7 +130,10 @@ CREATE TABLE `issues` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
   KEY `idx_issues_status` (`status`),
-  KEY `idx_issues_category` (`category`)
+  KEY `idx_issues_category` (`category`),
+  KEY `idx_issues_due` (`due_at`),
+  KEY `idx_issues_reported` (`reported_at`),
+  KEY `idx_issues_template` (`report_template_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -156,7 +166,8 @@ CREATE TABLE `sops` (
   `content` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `code` (`code`)
+  UNIQUE KEY `code` (`code`),
+  KEY `idx_sops_review` (`review_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -194,6 +205,7 @@ CREATE TABLE `tasks` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `fk_tasks_issue` (`issue_id`),
+  KEY `idx_tasks_column` (`column_key`,`position`),
   CONSTRAINT `fk_tasks_issue` FOREIGN KEY (`issue_id`) REFERENCES `issues` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

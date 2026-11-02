@@ -1,17 +1,32 @@
 <?php
 /** Dashboard: posture at a glance, risk distribution, activity and templates. */
 
-$statSops   = (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE status = 'Active'")->fetchColumn();
-$statReview = (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE status = 'In Review'")->fetchColumn();
-$statOpen   = (int) $pdo->query("SELECT COUNT(*) FROM issues WHERE status IN ('Open','In Progress')")->fetchColumn();
-$statCrit   = (int) $pdo->query("SELECT COUNT(*) FROM issues WHERE severity = 'Critical' AND status <> 'Resolved'")->fetchColumn();
-$statOver   = (int) $pdo->query("SELECT COUNT(*) FROM issues WHERE due_at < CURDATE() AND status <> 'Resolved'")->fetchColumn();
-$statFiles  = (int) $pdo->query('SELECT COUNT(*) FROM issue_files')->fetchColumn();
-$statPeople = (int) $pdo->query('SELECT COUNT(*) FROM suspects')->fetchColumn();
-$statTpl    = (int) $pdo->query('SELECT COUNT(*) FROM templates')->fetchColumn();
-$statUsers  = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE active = 1')->fetchColumn();
-$excActive  = (int) $pdo->query("SELECT COUNT(*) FROM exceptions WHERE status = 'Active'")->fetchColumn();
-$excSoon    = (int) $pdo->query("SELECT COUNT(*) FROM exceptions WHERE status = 'Active' AND period_end BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)")->fetchColumn();
+// One round trip for every headline number instead of twelve.
+$agg = $pdo->query("SELECT
+    (SELECT COUNT(*) FROM sops WHERE status = 'Active') AS sops_active,
+    (SELECT COUNT(*) FROM sops WHERE status = 'In Review') AS sops_review,
+    (SELECT COUNT(*) FROM issues WHERE status IN ('Open','In Progress')) AS issues_open,
+    (SELECT COUNT(*) FROM issues WHERE severity = 'Critical' AND status <> 'Resolved') AS issues_critical,
+    (SELECT COUNT(*) FROM issues WHERE due_at < CURDATE() AND status <> 'Resolved') AS issues_overdue,
+    (SELECT COUNT(*) FROM issue_files) AS files,
+    (SELECT COUNT(*) FROM suspects) AS people,
+    (SELECT COUNT(*) FROM templates) AS templates,
+    (SELECT COUNT(*) FROM users WHERE active = 1) AS users,
+    (SELECT COUNT(*) FROM exceptions WHERE status = 'Active') AS exc_active,
+    (SELECT COUNT(*) FROM exceptions WHERE status = 'Active'
+        AND period_end BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)) AS exc_soon")->fetch() ?: [];
+
+$statSops   = (int) ($agg['sops_active'] ?? 0);
+$statReview = (int) ($agg['sops_review'] ?? 0);
+$statOpen   = (int) ($agg['issues_open'] ?? 0);
+$statCrit   = (int) ($agg['issues_critical'] ?? 0);
+$statOver   = (int) ($agg['issues_overdue'] ?? 0);
+$statFiles  = (int) ($agg['files'] ?? 0);
+$statPeople = (int) ($agg['people'] ?? 0);
+$statTpl    = (int) ($agg['templates'] ?? 0);
+$statUsers  = (int) ($agg['users'] ?? 0);
+$excActive  = (int) ($agg['exc_active'] ?? 0);
+$excSoon    = (int) ($agg['exc_soon'] ?? 0);
 $excList    = $pdo->query("SELECT * FROM exceptions WHERE status <> 'Revoked' ORDER BY period_end ASC LIMIT 5")->fetchAll();
 
 $byCategory = $pdo->query("SELECT category,

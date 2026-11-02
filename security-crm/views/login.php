@@ -7,12 +7,23 @@ $error   = $_SESSION['login_error'] ?? null;
 $prefill = $_SESSION['login_user'] ?? '';
 unset($_SESSION['login_error'], $_SESSION['login_user']);
 
-$demo = [
-    ['admin',   'Admin@123',   'Administrator', 'Everything, including users'],
-    ['manager', 'Manager@123', 'Security Manager', 'All records + templates'],
-    ['analyst', 'Analyst@123', 'Security Analyst', 'Investigate, upload, move cards'],
-    ['viewer',  'Viewer@123',  'Auditor / Viewer', 'Read-only, downloads'],
+// Accounts and passwords come from demo_accounts() so the seed and this hint
+// can never drift apart; only the one-line description lives here.
+$demoHints = [
+    'admin'   => 'Everything, including users',
+    'manager' => 'All records + templates',
+    'analyst' => 'Investigate, upload, move cards',
+    'viewer'  => 'Read-only, downloads',
 ];
+$demo = [];
+foreach (demo_accounts() as $account) {
+    $demo[] = [
+        $account['username'],
+        $account['password'],
+        role_label($account['role']),
+        $demoHints[$account['username']] ?? '',
+    ];
+}
 ?>
 <!doctype html>
 <html lang="en">

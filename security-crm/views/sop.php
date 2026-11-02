@@ -19,11 +19,16 @@ $st = $pdo->prepare($sql);
 $st->execute($args);
 $rows = $st->fetchAll();
 
+// Two grouped queries replace seven COUNT(*) round trips.
+$byType   = $pdo->query('SELECT type, COUNT(*) c FROM sops GROUP BY type')->fetchAll(PDO::FETCH_KEY_PAIR);
+$byStatus = $pdo->query('SELECT status, COUNT(*) c FROM sops GROUP BY status')->fetchAll(PDO::FETCH_KEY_PAIR);
+$total    = array_sum($byType);
+
 $counts = [
-    'all'      => (int) $pdo->query('SELECT COUNT(*) FROM sops')->fetchColumn(),
-    'Policy'   => (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE type='Policy'")->fetchColumn(),
-    'SOP'      => (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE type='SOP'")->fetchColumn(),
-    'Guideline'=> (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE type='Guideline'")->fetchColumn(),
+    'all'      => $total,
+    'Policy'   => (int) ($byType['Policy'] ?? 0),
+    'SOP'      => (int) ($byType['SOP'] ?? 0),
+    'Guideline'=> (int) ($byType['Guideline'] ?? 0),
 ];
 
 function chip_url(array $over): string
@@ -35,10 +40,10 @@ function chip_url(array $over): string
 $activeFilters = ($type || $scope || $status || $q !== '');
 
 $sopStats = [
-    'all'      => $counts['all'],
-    'active'   => $counts['all'] - (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE status IN ('Draft','Obsolete')")->fetchColumn(),
-    'review'   => (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE status='In Review'")->fetchColumn(),
-    'obsolete' => (int) $pdo->query("SELECT COUNT(*) FROM sops WHERE status='Obsolete'")->fetchColumn(),
+    'all'      => $total,
+    'active'   => $total - (int) ($byStatus['Draft'] ?? 0) - (int) ($byStatus['Obsolete'] ?? 0),
+    'review'   => (int) ($byStatus['In Review'] ?? 0),
+    'obsolete' => (int) ($byStatus['Obsolete'] ?? 0),
 ];
 ?>
 

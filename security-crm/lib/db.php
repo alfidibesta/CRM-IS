@@ -9,6 +9,12 @@
 
 declare(strict_types=1);
 
+/**
+ * Bump when the DDL below or the upgrade path changes: migrate() then runs
+ * once on the next request instead of on every single one.
+ */
+const SCHEMA_VERSION = 20261102;
+
 function db(array $cfg): PDO
 {
     $dsn = sprintf('mysql:host=%s;port=%d;charset=%s', $cfg['host'], $cfg['port'], $cfg['charset']);
@@ -21,15 +27,42 @@ function db(array $cfg): PDO
     $pdo->exec("CREATE DATABASE IF NOT EXISTS `$dbname` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
     $pdo->exec("USE `$dbname`");
 
-    migrate($pdo);
+    if (schema_version($pdo) !== SCHEMA_VERSION) {
+        migrate($pdo);
+        set_schema_version($pdo, SCHEMA_VERSION);
+    }
+
     seedIfEmpty($pdo);
 
     return $pdo;
 }
 
+/** Stored schema version; 0 when the meta table does not exist yet. */
+function schema_version(PDO $pdo): int
+{
+    try {
+        $v = $pdo->query('SELECT version FROM schema_meta WHERE id = 1')->fetchColumn();
+        return $v === false ? 0 : (int) $v;
+    } catch (Throwable $e) {
+        return 0; // first run: schema_meta is created by migrate()
+    }
+}
+
+function set_schema_version(PDO $pdo, int $version): void
+{
+    $pdo->prepare('INSERT INTO schema_meta (id, version) VALUES (1, ?) ON DUPLICATE KEY UPDATE version = VALUES(version)')
+        ->execute([$version]);
+}
+
 function migrate(PDO $pdo): void
 {
     $ddl = <<<'SQL'
+CREATE TABLE IF NOT EXISTS schema_meta (
+    id         INT PRIMARY KEY,
+    version    INT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS sops (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     code          VARCHAR(20)  NOT NULL UNIQUE,
@@ -43,7 +76,8 @@ CREATE TABLE IF NOT EXISTS sops (
     review_at     DATE NULL,
     summary       VARCHAR(500) NOT NULL DEFAULT '',
     content       TEXT NULL,
-    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_sops_review (review_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -77,7 +111,10 @@ CREATE TABLE IF NOT EXISTS issues (
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_issues_status (status),
-    INDEX idx_issues_category (category)
+    INDEX idx_issues_category (category),
+    INDEX idx_issues_due (due_at),
+    INDEX idx_issues_reported (reported_at),
+    INDEX idx_issues_template (report_template_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -91,6 +128,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     issue_id      INT NULL,
     position      INT NOT NULL DEFAULT 0,
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tasks_column (column_key, position),
     CONSTRAINT fk_tasks_issue FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -236,7 +274,8 @@ CREATE TABLE IF NOT EXISTS exceptions (
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_exc_period (period_end),
-    INDEX idx_exc_status (status)
+    INDEX idx_exc_status (status),
+    INDEX idx_exc_category (category)
 ) ENGINE=InnoDB;
 SQL;
 
@@ -267,6 +306,17 @@ SQL;
         'report_body'       => 'MEDIUMTEXT NULL',
     ]);
     ensure_columns($pdo, 'sops', ['content' => 'TEXT NULL']);
+
+    // Same upgrade path for indexes: new installs get them from the DDL above,
+    // older ones are added once here (guarded by SCHEMA_VERSION).
+    ensure_indexes($pdo, 'issues', [
+        'idx_issues_due'      => 'due_at',
+        'idx_issues_reported' => 'reported_at',
+        'idx_issues_template' => 'report_template_id',
+    ]);
+    ensure_indexes($pdo, 'sops', ['idx_sops_review' => 'review_at']);
+    ensure_indexes($pdo, 'exceptions', ['idx_exc_category' => 'category']);
+    ensure_indexes($pdo, 'tasks', ['idx_tasks_column' => 'column_key, position']);
 }
 
 /** Add missing columns to an existing table (no-op when present). */
@@ -284,20 +334,55 @@ function ensure_columns(PDO $pdo, string $table, array $defs): void
     }
 }
 
+/** Add missing indexes to an existing table (no-op when present). */
+function ensure_indexes(PDO $pdo, string $table, array $indexes): void
+{
+    $have = [];
+    $st = $pdo->query('SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ' . $pdo->quote($table));
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $name) {
+        $have[strtolower((string) $name)] = true;
+    }
+    foreach ($indexes as $name => $columns) {
+        if (!isset($have[strtolower($name)])) {
+            $pdo->exec('ALTER TABLE `' . $table . '` ADD INDEX `' . $name . '` (' . $columns . ')');
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ seed */
 
 function seedIfEmpty(PDO $pdo): void
 {
-    seed_users($pdo);
-    seed_sops($pdo);
-    seed_issues($pdo);
-    seed_tasks($pdo);
-    seed_templates($pdo);
-    seed_issue_extras($pdo);
-    seed_exceptions($pdo);
-    seed_activity($pdo);
-    seed_audit($pdo);
-    seed_notifications($pdo);
+    // One round trip answers "is anything empty?". A seeder is only called
+    // when its table is empty, so the per-seeder COUNT checks never run on a
+    // populated database.
+    $counts = $pdo->query('SELECT
+            (SELECT COUNT(*) FROM users)                AS users,
+            (SELECT COUNT(*) FROM sops)                 AS sops,
+            (SELECT COUNT(*) FROM issues)               AS issues,
+            (SELECT COUNT(*) FROM tasks)                AS tasks,
+            (SELECT COUNT(*) FROM templates)            AS templates,
+            (SELECT COUNT(*) FROM issues WHERE tags <> \'\' OR report_template_id IS NOT NULL) AS issue_extras,
+            (SELECT COUNT(*) FROM exception_categories) AS categories,
+            (SELECT COUNT(*) FROM exceptions)           AS exceptions,
+            (SELECT COUNT(*) FROM suspects)             AS suspects,
+            (SELECT COUNT(*) FROM issue_events)         AS events,
+            (SELECT COUNT(*) FROM audit_log)            AS audit,
+            (SELECT COUNT(*) FROM notifications)        AS notifications')->fetch() ?: [];
+
+    $empty = static fn(string $key): bool => (int) ($counts[$key] ?? 0) === 0;
+
+    if ($empty('users'))       { seed_users($pdo); }
+    if ($empty('sops'))        { seed_sops($pdo); }
+    if ($empty('issues'))      { seed_issues($pdo); }
+    if ($empty('tasks'))       { seed_tasks($pdo); }
+    if ($empty('templates'))   { seed_templates($pdo); }
+    if ($empty('issue_extras')) { seed_issue_extras($pdo); }
+    if ($empty('exceptions') || $empty('categories')) { seed_exceptions($pdo); }
+    if ($empty('suspects') || $empty('events')) { seed_activity($pdo); }
+    if ($empty('audit'))       { seed_audit($pdo); }
+    if ($empty('notifications')) { seed_notifications($pdo); }
 }
 
 /**
@@ -382,20 +467,28 @@ function seed_notifications(PDO $pdo): void
     }
 }
 
+/**
+ * The demo accounts, in one place: used by the seed and by the sign-in screen
+ * so the two can never disagree.
+ */
+function demo_accounts(): array
+{
+    return [
+        ['username' => 'admin',   'password' => 'Admin@123',   'name' => 'R. Hartono', 'email' => 'admin@plant.local',    'role' => 'admin'],
+        ['username' => 'manager', 'password' => 'Manager@123', 'name' => 'S. Wijaya',  'email' => 'security@plant.local', 'role' => 'manager'],
+        ['username' => 'analyst', 'password' => 'Analyst@123', 'name' => 'D. Kusuma',  'email' => 'analyst@plant.local',  'role' => 'analyst'],
+        ['username' => 'viewer',  'password' => 'Viewer@123',  'name' => 'A. Pratama', 'email' => 'audit@plant.local',    'role' => 'viewer'],
+    ];
+}
+
 function seed_users(PDO $pdo): void
 {
     if ((int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0) {
         return;
     }
-    $rows = [
-        ['admin',   'R. Hartono',   'admin@plant.local',   'admin',   'Admin@123'],
-        ['manager', 'S. Wijaya',    'security@plant.local','manager', 'Manager@123'],
-        ['analyst', 'D. Kusuma',    'analyst@plant.local', 'analyst', 'Analyst@123'],
-        ['viewer',  'A. Pratama',   'audit@plant.local',   'viewer',  'Viewer@123'],
-    ];
     $st = $pdo->prepare('INSERT INTO users (username,name,email,role,password_hash,active) VALUES (?,?,?,?,?,1)');
-    foreach ($rows as $r) {
-        $st->execute([$r[0], $r[1], $r[2], $r[3], password_hash($r[4], PASSWORD_DEFAULT)]);
+    foreach (demo_accounts() as $a) {
+        $st->execute([$a['username'], $a['name'], $a['email'], $a['role'], password_hash($a['password'], PASSWORD_DEFAULT)]);
     }
 }
 

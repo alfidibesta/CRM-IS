@@ -22,7 +22,7 @@ function audit_boot(PDO $pdo): void
 /** Action catalogue: key => [label, tone]. Also drives the filter menu. */
 function audit_actions(): array
 {
-    return [
+    static $actions = [
         'auth.login'   => ['Sign-in', 'green'],
         'auth.logout'  => ['Sign-out', 'neutral'],
         'auth.failed'  => ['Failed sign-in', 'red'],
@@ -58,6 +58,8 @@ function audit_actions(): array
         'user.delete'  => ['User deleted', 'red'],
         'audit.export' => ['Trail exported', 'orange'],
     ];
+
+    return $actions;
 }
 
 function audit_action_label(string $action): string

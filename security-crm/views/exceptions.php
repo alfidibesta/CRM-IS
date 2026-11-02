@@ -47,7 +47,8 @@ $st = $pdo->prepare('SELECT * FROM exceptions'
 $st->execute($args);
 $rows = $st->fetchAll();
 
-$all      = $pdo->query('SELECT * FROM exceptions')->fetchAll();
+// Only the four columns the counters below need; the register rows come from the filtered query above.
+$all      = $pdo->query('SELECT status, period_end, category, risk_level FROM exceptions')->fetchAll();
 $stateCnt = ['Active' => 0, 'Expiring' => 0, 'Expired' => 0, 'Pending approval' => 0, 'Revoked' => 0];
 $catCnt   = [];
 $riskCnt  = ['High' => 0, 'Medium' => 0, 'Low' => 0];

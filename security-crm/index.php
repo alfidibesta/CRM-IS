@@ -1067,18 +1067,9 @@ if ($page === 'issue_doc') {
         exit('Issue not found.');
     }
 
-    $q = function (string $sql, array $args = []) use ($pdo): array {
-        $s = $pdo->prepare($sql);
-        $s->execute($args);
-        return $s->fetchAll();
-    };
-
-    $ctx = [
-        'suspects' => $q('SELECT * FROM suspects WHERE issue_id = ? ORDER BY FIELD(involvement,\'Primary\',\'Accomplice\',\'Witness\',\'Victim\',\'Unknown\'), id', [$issue['id']]),
-        'files'    => $q('SELECT * FROM issue_files WHERE issue_id = ? ORDER BY id', [$issue['id']]),
-        'tasks'    => $q('SELECT t.* FROM tasks t WHERE t.issue_id = ? ORDER BY FIELD(t.column_key,\'in_progress\',\'review\',\'planned\',\'backlog\',\'done\'), t.position', [$issue['id']]),
-        'events'   => $q('SELECT * FROM issue_events WHERE issue_id = ? ORDER BY created_at, id', [$issue['id']]),
-    ];
+    // Same loader as the detail page (lib/report.php), so the .docx and the
+    // screen can never disagree about which rows belong to the issue.
+    $ctx = issue_report_context($pdo, (int) $issue['id']);
 
     $form = issue_report_template($pdo, $issue);
     $fill = issue_report_fill($issue, $ctx);
