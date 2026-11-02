@@ -1,50 +1,72 @@
-# CRM
+# Security CRM (IS)
 
-A complete, single-workspace CRM: overview dashboard, contacts, companies, a
-drag-and-drop deal board, tasks, notes and file attachments. It runs on
-Freebuff Sites with Sign in with Freebuff, D1 for data and R2 for files, and
-every record is scoped to the signed-in user.
+An information-security workspace for a manufacturing plant, written in **native
+PHP 8 + MySQL** — no framework, no Composer, no build step. Drop the
+`security-crm` folder into Laragon and it sets itself up on the first request.
 
-## Run it
+| Module | What it does |
+| --- | --- |
+| **Dashboard** | posture at a glance: stats, issues by category, risk ratings, live activity, upcoming reviews |
+| **SOP & Policy library** | typed, scoped, versioned documents with review dates and the controlled text inline |
+| **Workflow board** | drag-and-drop kanban (Backlog → Planned → In Progress → Review → Done) backed by the issue register |
+| **Issue register** | categories, tags, severity, search, risk score, quick status changes; each issue opens to a full report |
+| **Issue report** | 5×5 risk assessment, root cause, actions, persons involved, evidence upload, activity log, `.docx` export that follows a chosen form template (adjustable per report) |
+| **Form templates** | NDA, supplier & manufacturing agreements, visitor undertakings, audit checklists… downloadable as real Word files |
+| **EDLP exceptions** | time-bound deviations (USB, websites, cameras, cloud apps) with period, justification, compensating control and derived Active / Expiring / Expired state |
+| **Users & authority** | four roles with a server-enforced permission matrix, login lockout, audit trail |
 
-```sh
-bun install
-bun run dev        # http://localhost:5173 with local D1 and R2 (Miniflare)
-bun run build      # dist/client (assets) + dist/crm/index.js (Worker)
+## Run it in Laragon
+
+1. Copy the **`security-crm`** folder into Laragon's web root, e.g.
+   `C:\laragon\www\security-crm\`.
+2. Laragon → **Start All** (Apache + MySQL, both green).
+3. Open <http://localhost/security-crm/> (or `http://security-crm.test/` with
+   auto virtual hosts).
+
+The first page load creates the `security_crm` database, its eleven tables and
+the sample data, including the accounts below. Nothing to import.
+
+> **Deeper setup:** [`security-crm/README.md`](security-crm/README.md) covers the
+> `AllowOverride All` setting that `.htaccess` needs, the `php.ini` upload
+> limits the app reports, the `SECOPS_DB_*` variables, the full page and
+> permission reference, the deployment checklist and a troubleshooting table.
+>
+> No Apache? From inside `security-crm`: `php -S localhost:8000 router.php`.
+
+## Sign in
+
+| Username | Password | Role |
+| --- | --- | --- |
+| `admin` | `Admin@123` | Administrator — everything, including users and authority |
+| `manager` | `Manager@123` | Security Manager — every record, template and exception control |
+| `analyst` | `Analyst@123` | Security Analyst — investigate, upload evidence, move cards, log exceptions |
+| `viewer` | `Viewer@123` | Auditor / Viewer — read-only review, download and export |
+
+Change these before the app leaves a development machine. Five wrong passwords
+lock an account for 15 minutes; attempts are logged per account and per address.
+
+## Requirements
+
+PHP **8.1+** with `pdo_mysql`, `mbstring` and (optionally) `fileinfo`, plus
+MySQL 8 / MariaDB — all bundled with Laragon. `mod_rewrite` and `ext-zip` are
+not used; Word files are built by a small OOXML writer in `lib/word.php`.
+
+## Repository layout
+
+```
+security-crm/     the application — see security-crm/README.md
+src/  index.html  an unrelated Vite + Freebuff CRM starter that shipped with
+package.json      this project; it is not used by the PHP app and can be
+deploy.json       deleted if you only want Security CRM.
 ```
 
-On localhost without a `FREEBUFF_CLIENT_ID`, the app signs you in as a local
-development user so everything works before auth is provisioned. A new
-workspace is seeded with sample data; Settings can restore or clear it.
+## Security
 
-## Connect it to Freebuff
-
-1. `sites_create`, then `sites_add_storage` for D1 named `DB` and R2 named `FILES`.
-2. `sites_enable_auth` (pass `http://localhost:5173` as the local origin while
-   developing). Copy the development variables into `.dev.vars` (see
-   `.dev.vars.example`) to use real accounts locally.
-3. `bun run build`, then `sites_deploy` with `deploy.json`. The deploy injects
-   `FREEBUFF_CLIENT_ID`, `FREEBUFF_ISSUER` and `APP_ORIGIN`, and attaches the
-   `DB` and `FILES` bindings.
-
-If a binding is missing the app says so instead of failing: Settings shows what
-is connected, and file uploads are hidden until R2 is attached.
-
-## Where things are
-
-- `src/worker/` is the Hono API. `db.ts` owns the schema (created on first
-  request), `seed.ts` the sample data, `auth.ts` the Freebuff integration and
-  the loopback-only development user, `routes/*` the endpoints.
-- `src/app/` is the React app. `components/ui.tsx` holds the primitives
-  (buttons, inputs, dialogs, drawer, menus, toasts); `pages/*` the screens;
-  `lib/api.ts` the data hooks (TanStack Query).
-- `src/shared/types.ts` is the contract between the two.
-- `src/styles.css` holds the design tokens. Everything rounded is a squircle
-  via `corner-shape`; true circles use the `round` class.
-
-## Security notes
-
-Every `/api/*` route requires a signed-in user and scopes queries by
-`owner_sub`. Mutations must be same-origin (`isSameOriginRequest`). Files are
-addressed by database row, never by R2 key, so one user cannot read another's.
-Personalised responses are `Cache-Control: private, no-store`.
+Sign-in is required for every page and every POST action; roles are checked
+server-side (403 on a missing permission, 419 on a missing or empty form token).
+Responses carry a nonce-based CSP, `X-Frame-Options: DENY`, `nosniff` and a
+referrer policy; cookies are `HttpOnly` + `SameSite=Lax` (+ `Secure` on HTTPS);
+passwords are bcrypt; all SQL is prepared; uploads are extension-whitelisted,
+mime-checked, script-blocked, stored under random names and served only through
+a permission-checked route; `logs/app.log` holds errors that never reach the
+browser. See the deployment checklist in `security-crm/README.md`.
