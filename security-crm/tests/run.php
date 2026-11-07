@@ -163,6 +163,24 @@ ck('cctv age never', cctv_age_label(null), 'never');
 ck('cctv health tone', cctv_health_tone('bad'), 'red');
 ck('cctv health summary', cctv_health_summary([['state' => 'ok'], ['state' => 'warn'], ['state' => 'warn']])['warn'], 2);
 
+/* retention planning — the current frame is kept, expired ones go */
+ck('cctv frame code stream', cctv_frame_code('CAM-01-20261107-101010.jpg'), 'CAM-01');
+ck('cctv frame code demo', cctv_frame_code('CAM-07-demo.jpg'), 'CAM-07');
+ck('cctv frame code foreign', cctv_frame_code('app.log'), '');
+$now   = 1700000000;
+$plan  = cctv_prune_plan([
+    'CAM-01-20260101-000000.jpg' => $now - 40 * 86400,   // 40 d, retention 30 → delete
+    'CAM-01-demo.jpg'            => $now - 400 * 86400,  // current frame → keep
+    'CAM-02-20260101-000000.jpg' => $now - 40 * 86400,   // retention 90 → keep
+    'CAM-03-20260101-000000.jpg' => $now - 5 * 86400,    // retention 30 → keep
+    'notes.txt'                  => $now - 40 * 86400,   // not ours → keep
+    'evidence.jpg'               => $now - 40 * 86400,   // not our naming → keep
+    '.pruned'                    => $now - 400 * 86400, // marker → keep
+], ['CAM-01-demo.jpg' => true], ['CAM-01' => 30, 'CAM-02' => 90, 'CAM-03' => 30], 30, $now);
+ck('cctv prune deletes expired only', $plan['delete'], ['CAM-01-20260101-000000.jpg']);
+ck('cctv prune keeps current, fresh and foreign files', $plan['kept'], 6);
+ck('cctv keep days sane', cctv_keep_days() >= 1, true);
+
 echo $fail === 0
     ? "OK — {$pass} checks passed\n"
     : "FAILED — {$fail} of " . ($pass + $fail) . " checks\n";

@@ -240,6 +240,7 @@ function cctv_url(array $over): string
       </label>
       <label class="field"><span>Retention (days)</span>
         <input type="number" name="retention_days" min="1" max="365" value="<?= (int) ($edit['retention_days'] ?? 30) ?>">
+        <small class="muted">Older frames are deleted after this many days; each camera's current frame is always kept.</small>
       </label>
       <label class="field"><span>Status</span>
         <select name="status">
@@ -292,9 +293,18 @@ function cctv_url(array $over): string
       </tbody>
     </table>
   </div>
-</details>
 
-<details class="panel cctv-block" data-collapse="cctv-runbook" <?= $ffmpeg === null ? 'open' : '' ?>>
+  <?php if ($canManage): ?>
+    <div class="cctv-bar">
+      <form method="post" action="index.php" data-confirm="Delete frames older than each camera's retention? The current frame of every camera is always kept.">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="camera_prune">
+        <button type="submit" class="btn btn--ghost btn--sm">Clean up old frames</button>
+      </form>
+      <span class="muted">Sweeps automatically once a day on this page — no cron needed.</span>
+    </div>
+  <?php endif; ?>
+</details> <?= $ffmpeg === null ? 'open' : '' ?>>
   <summary class="cctv-block__head">
     <h2>Add FFmpeg to Laragon</h2>
     <span class="muted"><?= $ffmpeg !== null ? 'already detected' : 'needed for RTSP / RTMP / HLS cameras' ?></span>

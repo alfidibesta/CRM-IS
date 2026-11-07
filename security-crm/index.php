@@ -155,6 +155,7 @@ function action_permission(string $action): ?string
         'camera_delete'  => 'cctv.manage',
         'camera_capture' => 'cctv.capture',
         'camera_capture_all' => 'cctv.capture',
+        'camera_prune'   => 'cctv.manage',
         'create_user'    => 'user.manage',
         'update_user'    => 'user.manage',
         'delete_user'    => 'user.manage',
@@ -303,6 +304,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 audit('cctv.delete', 'camera', (int) $cam['id'], (string) $cam['code'], (string) $cam['name']);
                 flash('Camera ' . $cam['code'] . ' removed from the wall.');
             }
+            back_to('cctv');
+
+        case 'camera_prune':
+            $res = cctv_prune($pdo);
+            audit('cctv.prune', 'camera', null, 'CCTV frames',
+                $res['removed'] . ' old frame(s) removed · ' . human_size($res['bytes']) . ' freed (manual)'
+                . ($res['failed'] > 0 ? ' · ' . $res['failed'] . ' failed' : ''));
+            flash($res['removed'] === 0
+                ? 'No frame was older than its retention — nothing deleted.'
+                : $res['removed'] . ' old frame(s) removed, ' . human_size($res['bytes']) . ' freed.');
             back_to('cctv');
 
         case 'create_issue':
@@ -1226,6 +1237,12 @@ if ($page === 'issue' || $page === 'template') {
         http_response_code(404);
         $titles[$page] = ['Not found', 'That record does not exist any more'];
     }
+}
+
+// Retention sweep: once a day, on an ordinary CCTV page view, so no cron job is
+// needed. Current frames are always kept (see cctv_prune_plan()).
+if ($page === 'cctv') {
+    cctv_prune_if_due($pdo);
 }
 
 require __DIR__ . '/views/header.php';

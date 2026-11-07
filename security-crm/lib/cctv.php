@@ -434,6 +434,169 @@ function cctv_capture(PDO $pdo, array $cam, bool $quiet = false): array
     return $res;
 }
 
+/* --------------------------------------------------------------- retention */
+
+/** Fallback retention for frames no camera claims (SECOPS_CCTV_KEEP_DAYS, else 30). */
+function cctv_keep_days(): int
+{
+    $env = (int) getenv('SECOPS_CCTV_KEEP_DAYS');
+    return $env > 0 ? min(365, $env) : 30;
+}
+
+/** Camera code that produced a stored frame, or '' when we did not write it. */
+function cctv_frame_code(string $name): string
+{
+    return preg_match('/^(.+?)-(?:\d{8}-\d{6}|demo)\.(?:jpe?g|png)$/i', $name, $m) === 1 ? $m[1] : '';
+}
+
+/**
+ * Every real file in the frame folder, dotfiles and subfolders skipped.
+ *
+ * @return array<string,array{mtime:int,size:int}>
+ */
+function cctv_frame_files(string $dir): array
+{
+    $out = [];
+    foreach (is_dir($dir) ? (scandir($dir) ?: []) : [] as $name) {
+        $name = (string) $name;
+        if ($name === '' || $name[0] === '.') {
+            continue;
+        }
+        $path = $dir . DIRECTORY_SEPARATOR . $name;
+        if (!is_file($path)) {
+            continue;
+        }
+        $out[$name] = ['mtime' => (int) @filemtime($path), 'size' => (int) @filesize($path)];
+    }
+    return $out;
+}
+
+/**
+ * Decide which frames may go — no filesystem access, so it is testable.
+ *
+ * The frame a camera currently points at is never deleted, and a name this
+ * module did not write is left alone. Everything else expires once it is older
+ * than its camera's retention (or the global default for unknown codes).
+ *
+ * @param array<string,int>  $mtimes    file name => mtime
+ * @param array<string,true> $keep      file names still referenced by a camera
+ * @param array<string,int>  $retention camera code => retention days
+ * @return array{delete:list<string>, kept:int}
+ */
+function cctv_prune_plan(array $mtimes, array $keep, array $retention, int $defaultDays, int $now): array
+{
+    $delete = [];
+    $kept   = 0;
+
+    foreach ($mtimes as $name => $mtime) {
+        $name = (string) $name;
+        if ($name === '' || $name[0] === '.' || cctv_safe_file($name) === '' || isset($keep[$name])) {
+            $kept++;
+            continue;
+        }
+        // Only frames this module wrote (CODE-stamp.jpg / CODE-demo.jpg) are
+        // candidates; anything else in the folder is not ours to remove.
+        $code = cctv_frame_code($name);
+        if ($code === '') {
+            $kept++;
+            continue;
+        }
+
+        $days = max(1, min(365, (int) ($retention[$code] ?? $defaultDays)));
+        if ($now - (int) $mtime > $days * 86400) {
+            $delete[] = $name;
+        } else {
+            $kept++;
+        }
+    }
+
+    return ['delete' => $delete, 'kept' => $kept];
+}
+
+/**
+ * Delete expired frames. Returns what happened; the marker file records the
+ * sweep so the daily check needs no cron entry.
+ *
+ * @return array{removed:int, bytes:int, kept:int, failed:int}
+ */
+function cctv_prune(PDO $pdo, bool $dryRun = false): array
+{
+    $dir = cctv_dir();
+    $out = ['removed' => 0, 'bytes' => 0, 'kept' => 0, 'failed' => 0];
+    if (!is_dir($dir)) {
+        return $out;
+    }
+
+    $keep      = [];
+    $retention = [];
+    foreach ($pdo->query('SELECT code, frame_file, retention_days FROM cameras')->fetchAll() as $c) {
+        if ((string) $c['frame_file'] !== '') {
+            $keep[(string) $c['frame_file']] = true;
+        }
+        $retention[(string) $c['code']] = (int) $c['retention_days'];
+    }
+
+    $mtimes = [];
+    $sizes  = [];
+    foreach (cctv_frame_files($dir) as $name => $f) {
+        $mtimes[$name] = $f['mtime'];
+        $sizes[$name]  = $f['size'];
+    }
+
+    $plan = cctv_prune_plan($mtimes, $keep, $retention, cctv_keep_days(), time());
+    $out['kept'] = $plan['kept'];
+
+    foreach ($plan['delete'] as $name) {
+        if (!$dryRun && !@unlink($dir . DIRECTORY_SEPARATOR . $name)) {
+            $out['failed']++;
+            app_log('cctv.prune', 'Could not delete the expired frame ' . $name);
+            continue;
+        }
+        $out['removed']++;
+        $out['bytes'] += (int) ($sizes[$name] ?? 0);
+    }
+
+    if (!$dryRun) {
+        @touch($dir . DIRECTORY_SEPARATOR . '.pruned');
+    }
+    return $out;
+}
+
+/**
+ * Daily sweep, run from an ordinary CCTV page view so nothing else is needed.
+ * Returns null when it is not due yet.
+ */
+function cctv_prune_if_due(PDO $pdo): ?array
+{
+    $marker = cctv_dir() . DIRECTORY_SEPARATOR . '.pruned';
+    $last   = is_file($marker) ? (int) @filemtime($marker) : 0;
+    if ($last > 0 && time() - $last < 86400) {
+        return null;
+    }
+
+    $res = cctv_prune($pdo);
+    audit('cctv.prune', 'camera', null, 'CCTV frames',
+        $res['removed'] . ' old frame(s) removed · ' . human_size($res['bytes']) . ' freed (automatic)');
+    if ($res['removed'] > 0 || $res['failed'] > 0) {
+        app_log('cctv.prune', 'Retention sweep removed ' . $res['removed'] . ' frame(s), '
+            . human_size($res['bytes']) . ' freed, ' . $res['failed'] . ' failed.');
+    }
+    return $res;
+}
+
+/** Frames on disk: count, total size and the oldest mtime. */
+function cctv_disk_usage(?string $dir = null): array
+{
+    $bytes  = 0;
+    $oldest = 0;
+    $files  = cctv_frame_files($dir ?? cctv_dir());
+    foreach ($files as $f) {
+        $bytes += $f['size'];
+        $oldest = $oldest === 0 ? $f['mtime'] : min($oldest, $f['mtime']);
+    }
+    return ['files' => count($files), 'bytes' => $bytes, 'oldest' => $oldest];
+}
+
 /* ------------------------------------------------------------ presentation */
 
 function cctv_frame_url(array $cam): string
@@ -535,6 +698,16 @@ function cctv_health(?PDO $pdo = null): array
     $rows[] = is_writable(cctv_dir())
         ? ['label' => 'Frame folder', 'state' => 'ok', 'detail' => 'uploads/cctv is writable', 'fix' => '']
         : ['label' => 'Frame folder', 'state' => 'bad', 'detail' => 'uploads/cctv is not writable', 'fix' => 'Grant the web server user write access to security-crm/uploads/cctv.'];
+
+    $disk  = cctv_disk_usage();
+    $large = $disk['bytes'] > 536870912;   // 500 MB
+    $age   = $disk['oldest'] > 0 ? max(1, (int) floor((time() - $disk['oldest']) / 86400)) . ' d old' : 'empty';
+    $rows[] = [
+        'label'  => 'Frame storage',
+        'state'  => $large ? 'warn' : 'ok',
+        'detail' => $disk['files'] . ' file(s), ' . human_size($disk['bytes']) . ' — oldest ' . $age,
+        'fix'    => $large ? 'Old frames are swept daily; lower a camera’s retention days, or run “Clean up old frames”.' : '',
+    ];
 
     if ($pdo !== null) {
         $byMode = $pdo->query('SELECT snapshot_mode, COUNT(*) AS n FROM cameras WHERE active = 1 GROUP BY snapshot_mode')->fetchAll(PDO::FETCH_KEY_PAIR);

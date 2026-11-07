@@ -91,6 +91,7 @@ or set environment variables, which take precedence:
 | `SECOPS_DB_NAME` | `security_crm` | database name (created if missing) |
 | `SECOPS_DEMO` | `1` | `0` hides the demo accounts on the sign-in screen |
 | `SECOPS_FFMPEG` | *(auto)* | full path to `ffmpeg.exe` when it is not in Laragon's `bin\ffmpeg\bin` |
+| `SECOPS_CCTV_KEEP_DAYS` | `30` | how long frames of deleted or unknown cameras are kept before the daily sweep removes them |
 
 On Apache, `SetEnv SECOPS_DB_USER secops` inside the vhost (or the folder's
 `.htaccess`) works; with the built-in server, prefix the command.
@@ -235,6 +236,15 @@ Frames are written to `uploads/cctv/` and served only through
 `?page=cctv_frame&id=N` after the permission check, with `no-store` so a
 capture is never hidden behind a cached image.
 
+**Retention.** Each camera's current frame is always kept; every older frame is
+deleted once it passes that camera's *retention days* (1–365). The sweep runs at
+most once a day from an ordinary CCTV page view — no cron job — and **Clean up
+old frames** in the system check runs it on demand (`cctv.manage`). Frames whose
+camera no longer exists fall back to `SECOPS_CCTV_KEEP_DAYS` (default 30), and
+names the module did not write are left alone. Every sweep is recorded in the
+audit trail as `cctv.prune`; the system check's *Frame storage* row shows the
+file count, total size and age.
+
 **Add FFmpeg to Laragon (no package manager needed).**
 
 1. Download a *release essentials* Windows build from `gyan.dev/ffmpeg/builds`
@@ -286,7 +296,7 @@ lib/auth.php         roles, permission catalogue, login, lockout, 401/403
 lib/db.php           PDO connection, schema migration, per-table seed
 lib/helpers.php      escaping, badges, CSRF, flash, tag + exception helpers
 lib/uploads.php      upload validation (whitelist, size, mime) + effective limit
-lib/cctv.php         camera register helpers, FFmpeg/HTTP/demo frame capture, health checks
+lib/cctv.php         camera register, FFmpeg/HTTP/demo capture, retention sweep, health checks
 lib/templates.php     template markup -> HTML blocks
 lib/word.php         OOXML (.docx) writer + ZIP encoder
 lib/report.php        risk scoring, report-form binding, issue report .docx blocks
@@ -395,5 +405,5 @@ gzip on;
 ### Tests
 
 ```bash
-php tests/run.php     # 79 unit checks: tags, risk, clamping, dates, parsing, CCTV
+php tests/run.php     # 85 unit checks: tags, risk, clamping, dates, parsing, CCTV, retention
 ```
