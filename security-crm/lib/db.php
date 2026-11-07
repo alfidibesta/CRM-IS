@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261102;
+const SCHEMA_VERSION = 20261107;
 
 function db(array $cfg): PDO
 {
@@ -277,6 +277,27 @@ CREATE TABLE IF NOT EXISTS exceptions (
     INDEX idx_exc_status (status),
     INDEX idx_exc_category (category)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS cameras (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    code           VARCHAR(20)  NOT NULL UNIQUE,
+    name           VARCHAR(120) NOT NULL,
+    location       VARCHAR(120) NOT NULL DEFAULT '',
+    zone           VARCHAR(60)  NOT NULL DEFAULT 'Perimeter',
+    stream_url     VARCHAR(255) NOT NULL DEFAULT '',
+    snapshot_mode  ENUM('ffmpeg','http','demo') NOT NULL DEFAULT 'demo',
+    resolution     VARCHAR(10)  NOT NULL DEFAULT '1080p',
+    retention_days INT NOT NULL DEFAULT 30,
+    status         ENUM('Online','Offline','Maintenance') NOT NULL DEFAULT 'Online',
+    notes          VARCHAR(500) NOT NULL DEFAULT '',
+    last_frame_at  DATETIME NULL,
+    frame_file     VARCHAR(90) NOT NULL DEFAULT '',
+    active         TINYINT(1) NOT NULL DEFAULT 1,
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_cam_status (status),
+    INDEX idx_cam_zone (zone)
+) ENGINE=InnoDB;
 SQL;
 
     // One exec() per statement: multi-statement queries are not portable
@@ -369,7 +390,8 @@ function seedIfEmpty(PDO $pdo): void
             (SELECT COUNT(*) FROM suspects)             AS suspects,
             (SELECT COUNT(*) FROM issue_events)         AS events,
             (SELECT COUNT(*) FROM audit_log)            AS audit,
-            (SELECT COUNT(*) FROM notifications)        AS notifications')->fetch() ?: [];
+            (SELECT COUNT(*) FROM notifications)        AS notifications,
+            (SELECT COUNT(*) FROM cameras)              AS cameras')->fetch() ?: [];
 
     $empty = static fn(string $key): bool => (int) ($counts[$key] ?? 0) === 0;
 
@@ -383,6 +405,43 @@ function seedIfEmpty(PDO $pdo): void
     if ($empty('suspects') || $empty('events')) { seed_activity($pdo); }
     if ($empty('audit'))       { seed_audit($pdo); }
     if ($empty('notifications')) { seed_notifications($pdo); }
+    if ($empty('cameras'))     { seed_cameras($pdo); }
+}
+
+/**
+ * Plant cameras. Every one starts in demo mode, so the wall renders without
+ * a live source; set a real RTSP or snapshot URL on the CCTV page to switch.
+ */
+function seed_cameras(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM cameras')->fetchColumn() > 0) {
+        return;
+    }
+
+    $rows = [
+        ['CAM-01', 'East gate turnstile', 'Plant - East Gate', 'Perimeter', '1080p', 60, 'Online',
+            'Turnstile and forklift lane. Used for the SEC-1002 tailgating review.'],
+        ['CAM-02', 'Dock D2 loading bay', 'Warehouse - Dock D2', 'Warehouse', '1080p', 45, 'Online',
+            'Re-aimed to cover the bay while the permanent pole is installed (EXC-003).'],
+        ['CAM-03', 'Server room door', 'HQ - Server Room SR-A1', 'Server room', '4K', 90, 'Online',
+            'Shows the door leaf, badge reader and alarm panel state. 90-day retention.'],
+        ['CAM-04', 'Line 2 control cabinet', 'Production - Line 2', 'Production floor', '1080p', 30, 'Online',
+            'Covers the OT cabinet and the USB port used for firmware updates.'],
+        ['CAM-05', 'West stair blind spot', 'Warehouse - West Stair', 'Warehouse', '720p', 30, 'Maintenance',
+            'Temporary sightline only; the permanent mount is on order (EXC-003).'],
+        ['CAM-06', 'Car park entrance', 'Car Park - Gate B', 'Car park', '1080p', 30, 'Online',
+            'Plate-level view of the entrance barrier and the visitor lane.'],
+        ['CAM-07', 'Canteen service counter', 'Office - Canteen', 'Office', '720p', 14, 'Online',
+            'Low retention on purpose: staff area, reviewed only on request.'],
+        ['CAM-08', 'IT comms room rack row', 'HQ - Comms Room CR-2', 'Server room', '4K', 90, 'Offline',
+            'Camera offline since the switch replacement; cable re-termination pending.'],
+    ];
+
+    $st = $pdo->prepare('INSERT INTO cameras (code, name, location, zone, resolution, retention_days, status, notes)
+                         VALUES (?,?,?,?,?,?,?,?)');
+    foreach ($rows as $r) {
+        $st->execute($r);
+    }
 }
 
 /**

@@ -3,7 +3,7 @@
 -- every table by itself on the first request, so importing this file is optional.
 --
 -- Tables: schema_meta, sops, issues (tags + report form), tasks, users, suspects,
---         issue_files, issue_events, templates, exception_categories, exceptions,
+--         issue_files, issue_events, templates, exception_categories, exceptions, cameras,
 --         login_attempts, audit_log, notifications
 -- Demo sign-in: admin / Admin@123 (see README.md for the other roles).
 
@@ -64,6 +64,31 @@ CREATE TABLE `exceptions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `cameras` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `code` varchar(20) NOT NULL,
+  `name` varchar(120) NOT NULL,
+  `location` varchar(120) NOT NULL DEFAULT '',
+  `zone` varchar(60) NOT NULL DEFAULT 'Perimeter',
+  `stream_url` varchar(255) NOT NULL DEFAULT '',
+  `snapshot_mode` enum('ffmpeg','http','demo') NOT NULL DEFAULT 'demo',
+  `resolution` varchar(10) NOT NULL DEFAULT '1080p',
+  `retention_days` int(11) NOT NULL DEFAULT 30,
+  `status` enum('Online','Offline','Maintenance') NOT NULL DEFAULT 'Online',
+  `notes` varchar(500) NOT NULL DEFAULT '',
+  `last_frame_at` datetime DEFAULT NULL,
+  `frame_file` varchar(90) NOT NULL DEFAULT '',
+  `active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`),
+  KEY `idx_cam_status` (`status`),
+  KEY `idx_cam_zone` (`zone`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */
 CREATE TABLE `issue_events` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `issue_id` int(11) NOT NULL,

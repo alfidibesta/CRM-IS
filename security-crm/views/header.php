@@ -11,6 +11,7 @@ $nav = [
     ['sop',       'SOP & Policy', 'blue', 'page.sop'],
     ['templates', 'Templates', 'neutral', 'page.templates'],
     ['exceptions', 'EDLP Exceptions', 'orange', 'page.exceptions'],
+    ['cctv',      'CCTV',        'red',    'page.cctv'],
     ['audit',     'Audit trail',  'neutral', 'page.audit'],
 ];
 
@@ -22,6 +23,17 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($h1) ?> · SecOps CRM</title>
+<script nonce="<?= e(csp_nonce()) ?>">
+/* Applied before first paint so the chosen theme never flashes. */
+(function () {
+  try {
+    var t = localStorage.getItem('secops-theme');
+    if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+    var d = localStorage.getItem('secops-density');
+    if (d === 'compact' || d === 'comfortable') document.documentElement.dataset.density = d;
+  } catch (e) {}
+})();
+</script>
 <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
@@ -70,6 +82,11 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
         <a class="nav__item <?= $page === 'users' ? 'is-active' : '' ?>" href="?page=users">
           <span class="nav__dot nav__dot--orange"></span> Users &amp; Authority
         </a>
+        <?php if (can('page.logs')): ?>
+          <a class="nav__item <?= $page === 'logs' ? 'is-active' : '' ?>" href="?page=logs">
+            <span class="nav__dot nav__dot--neutral"></span> System log
+          </a>
+        <?php endif; ?>
       <?php endif; ?>
     </nav>
 
@@ -89,6 +106,11 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
       </div>
 
       <div class="topbar__meta">
+        <button type="button" class="btn btn--ghost btn--sm" data-density-toggle aria-pressed="false"
+                title="Switch between compact and comfortable spacing">Compact</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-theme-toggle aria-pressed="true"
+                title="Bright or dim the interface">Dim</button>
+
         <span class="pill">ISO 27001 scope</span>
         <span class="pill pill--date"><?= date('D, d M Y') ?></span>
 

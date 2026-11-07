@@ -110,10 +110,25 @@ function once_check(): bool
     return true;
 }
 
-/** CSP nonce for the single inline script in footer.php. */
+/** CSP nonce for the inline scripts in header.php / footer.php. */
 function csp_nonce(): string
 {
     return (string) ($GLOBALS['csp_nonce'] ?? '');
+}
+
+/**
+ * Append one line to logs/app.log — the same file the fatal handler writes.
+ * Used for failures that are handled (a camera that will not answer) and would
+ * otherwise disappear. Never echoes anything back to the browser.
+ */
+function app_log(string $channel, string $message): void
+{
+    $dir = dirname(__DIR__) . '/logs';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    $line = '[' . date('c') . '] ' . $channel . ': ' . str_replace(["\r", "\n"], ' ', $message) . PHP_EOL;
+    @file_put_contents($dir . '/app.log', $line, FILE_APPEND);
 }
 
 function flash(string $msg): void

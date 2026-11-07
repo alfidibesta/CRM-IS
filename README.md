@@ -13,6 +13,7 @@ PHP 8 + MySQL** — no framework, no Composer, no build step. Drop the
 | **Issue report** | 5×5 risk assessment, root cause, actions, persons involved, evidence upload, activity log, `.docx` export that follows a chosen form template (adjustable per report) |
 | **Form templates** | NDA, supplier & manufacturing agreements, visitor undertakings, audit checklists… downloadable as real Word files |
 | **EDLP exceptions** | time-bound deviations (USB, websites, cameras, cloud apps) with period, justification, compensating control and derived Active / Expiring / Expired state |
+| **CCTV wall** | compact camera grid with the latest frame per view, frame capture through FFmpeg (HTTP snapshot and demo fallbacks), a one-click system check and retention/zone metadata |
 | **Users & authority** | four roles with a server-enforced permission matrix, login lockout, audit trail |
 
 ## Run it in Laragon

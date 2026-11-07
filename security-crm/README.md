@@ -90,6 +90,7 @@ or set environment variables, which take precedence:
 | `SECOPS_DB_PASS` | *(empty)* | database password |
 | `SECOPS_DB_NAME` | `security_crm` | database name (created if missing) |
 | `SECOPS_DEMO` | `1` | `0` hides the demo accounts on the sign-in screen |
+| `SECOPS_FFMPEG` | *(auto)* | full path to `ffmpeg.exe` when it is not in Laragon's `bin\ffmpeg\bin` |
 
 On Apache, `SetEnv SECOPS_DB_USER secops` inside the vhost (or the folder's
 `.htaccess`) works; with the built-in server, prefix the command.
@@ -145,8 +146,10 @@ php -S localhost:8000 router.php
 | `?page=templates` | Form template library — NDA, supplier & manufacturing agreement, visitor undertaking, incident report, audit checklist… filter, search, one-click Word download |
 | `?page=template&id=N` | Fill in the placeholders, live document preview, download `.docx`, list of issue reports that use this form, edit the source (editors only) |
 | `?page=exceptions` | **EDLP exception register** — USB, websites, cameras, cloud apps…: adjustable categories, validity period with expiring/expired state, detail, justification, compensating control, category manager |
+| `?page=cctv` | **CCTV wall** — compact camera tiles with the latest frame, status, zone and retention; filters, capture and a system check. Frames are pulled server-side (FFmpeg, HTTP snapshot or a generated demo frame) |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
 | `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters and a CSV export |
+| `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and handled failures such as a camera that will not answer |
 
 Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 (template), `?page=download&file=N` (evidence file), `?page=audit&export=csv`
@@ -164,6 +167,10 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Create / edit / delete templates | ✓ | ✓ | — | — |
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
 | Manage exception categories | ✓ | ✓ | — | — |
+| View the CCTV wall | ✓ | ✓ | ✓ | ✓ |
+| Capture camera frames | ✓ | ✓ | ✓ | — |
+| Add / edit / delete cameras | ✓ | ✓ | — | — |
+| Read the system log | ✓ | — | — | — |
 | Download files & export `.docx` | ✓ | ✓ | ✓ | ✓ |
 | Read the audit trail | ✓ | ✓ | — | ✓ |
 | Manage users, roles, passwords | ✓ | — | — | — |
@@ -203,6 +210,53 @@ compensating control and who approved it. State is derived: **Active**,
 Categories live in `exception_categories` and are fully adjustable — add, rename
 (records follow), restyle or delete when unused.
 
+## CCTV wall, FFmpeg and themes
+
+**Bright or dim.** The two buttons in the top bar switch the palette and the
+spacing. Both choices are stored in the browser (not in the account), are
+applied before the first paint so nothing flashes, and never change layout —
+the wall stays compact either way. **Compact** trims padding, table rows and
+tile size; **Dim** is the dark palette.
+
+**Collapsible panels.** Every panel header (camera wall, add/edit camera,
+system check, runbook, log tail) is a native `<details>` that remembers whether
+you left it open.
+
+**How a frame is captured.** The web server, never the browser, talks to the
+camera:
+
+| Source | Needs | Used for |
+| --- | --- | --- |
+| FFmpeg stream | `ffmpeg` binary | RTSP / RTMP / HLS cameras, one still per capture |
+| HTTP snapshot | `curl` | cameras that expose a JPEG URL |
+| Demo frame | `gd` | layout and training; drawn locally, clearly watermarked |
+
+Frames are written to `uploads/cctv/` and served only through
+`?page=cctv_frame&id=N` after the permission check, with `no-store` so a
+capture is never hidden behind a cached image.
+
+**Add FFmpeg to Laragon (no package manager needed).**
+
+1. Download a *release essentials* Windows build from `gyan.dev/ffmpeg/builds`
+   (or `github.com/BtbN/FFmpeg-Builds`).
+2. Rename the extracted folder to `ffmpeg` and place it at
+   `C:\laragon\bin\ffmpeg\bin\ffmpeg.exe`. The app checks that path directly, so
+   nothing needs to be added to `PATH`.
+3. Laragon → **Reload** (or restart Apache), then open `?page=cctv` → **System
+   check**: the row turns green and shows the FFmpeg version.
+4. Verify by hand: `C:\laragon\bin\ffmpeg\bin\ffmpeg.exe -version`.
+5. Installed elsewhere? Add `SetEnv SECOPS_FFMPEG "C:/tools/ffmpeg/ffmpeg.exe"`
+   to `security-crm/.htaccess` (or the vhost), or export the same variable for
+   the built-in server. Forward slashes on Windows.
+6. If capture reports *proc_open is disabled*, remove `proc_open` from
+   `disable_functions` in `php.ini` and restart Apache. Capture runs as a
+   short-lived child process capped at 8 seconds.
+
+Without FFmpeg the wall still works: HTTP snapshots use cURL, every other
+tile renders its demo frame, and the system check explains what is missing
+instead of failing silently. Capture failures are written to `logs/app.log`
+and to the audit trail, and appear under **System log**.
+
 ## Word export
 
 Both the issue report and the templates are built as **real `.docx` files** by
@@ -232,6 +286,7 @@ lib/auth.php         roles, permission catalogue, login, lockout, 401/403
 lib/db.php           PDO connection, schema migration, per-table seed
 lib/helpers.php      escaping, badges, CSRF, flash, tag + exception helpers
 lib/uploads.php      upload validation (whitelist, size, mime) + effective limit
+lib/cctv.php         camera register helpers, FFmpeg/HTTP/demo frame capture, health checks
 lib/templates.php     template markup -> HTML blocks
 lib/word.php         OOXML (.docx) writer + ZIP encoder
 lib/report.php        risk scoring, report-form binding, issue report .docx blocks
@@ -340,5 +395,5 @@ gzip on;
 ### Tests
 
 ```bash
-php tests/run.php     # 31 unit checks: tags, risk, clamping, dates, parsing
+php tests/run.php     # 79 unit checks: tags, risk, clamping, dates, parsing, CCTV
 ```

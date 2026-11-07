@@ -203,3 +203,57 @@
     refreshRisk();
   }
 })();
+
+  /* ------------------------------------------- theme + density + panels */
+
+  var root = document.documentElement;
+
+  function remember(key, value) {
+    try { localStorage.setItem(key, value); } catch (err) {}
+  }
+  function recall(key) {
+    try { return localStorage.getItem(key); } catch (err) { return null; }
+  }
+
+  var themeBtn = document.querySelector('[data-theme-toggle]');
+  function paintTheme() {
+    if (!themeBtn) return;
+    var dark = root.dataset.theme === 'dark';
+    themeBtn.textContent = dark ? 'Bright' : 'Dim';
+    themeBtn.setAttribute('aria-pressed', dark ? 'false' : 'true');
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      remember('secops-theme', root.dataset.theme);
+      paintTheme();
+    });
+    paintTheme();
+  }
+
+  var densityBtn = document.querySelector('[data-density-toggle]');
+  function paintDensity() {
+    if (!densityBtn) return;
+    var compact = root.dataset.density === 'compact';
+    densityBtn.textContent = compact ? 'Comfort' : 'Compact';
+    densityBtn.setAttribute('aria-pressed', compact ? 'true' : 'false');
+  }
+  if (densityBtn) {
+    densityBtn.addEventListener('click', function () {
+      root.dataset.density = root.dataset.density === 'compact' ? 'comfortable' : 'compact';
+      remember('secops-density', root.dataset.density);
+      paintDensity();
+    });
+    paintDensity();
+  }
+
+  // Collapsible panels remember their state per browser, per panel.
+  document.querySelectorAll('details[data-collapse]').forEach(function (box) {
+    var key = 'secops-open:' + box.getAttribute('data-collapse');
+    var saved = recall(key);
+    if (saved === '1') box.open = true;
+    else if (saved === '0') box.open = false;
+    box.addEventListener('toggle', function () {
+      remember(key, box.open ? '1' : '0');
+    });
+  });
