@@ -116,21 +116,6 @@ function csp_nonce(): string
     return (string) ($GLOBALS['csp_nonce'] ?? '');
 }
 
-/**
- * Append one line to logs/app.log — the same file the fatal handler writes.
- * Used for failures that are handled (a camera that will not answer) and would
- * otherwise disappear. Never echoes anything back to the browser.
- */
-function app_log(string $channel, string $message): void
-{
-    $dir = dirname(__DIR__) . '/logs';
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0775, true);
-    }
-    $line = '[' . date('c') . '] ' . $channel . ': ' . str_replace(["\r", "\n"], ' ', $message) . PHP_EOL;
-    @file_put_contents($dir . '/app.log', $line, FILE_APPEND);
-}
-
 function flash(string $msg): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {

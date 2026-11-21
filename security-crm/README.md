@@ -215,7 +215,7 @@ and now show their raw action key (for example `cctv.prune`).
 | `?page=exceptions` | **EDLP exception register** — USB, websites, cameras, cloud apps…: adjustable categories, validity period with expiring/expired state, detail, justification, compensating control, category manager |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
 | `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters and a CSV export |
-| `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and handled failures such as an upload that could not be stored |
+| `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and uncaught exceptions the browser never sees |
 
 Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 (template), `?page=download&file=N` (evidence file), `?page=audit&export=csv`

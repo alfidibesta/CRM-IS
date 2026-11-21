@@ -2,8 +2,9 @@
 /**
  * SecOps CRM — PHP native entry point / router.
  *
- *   ?page=login | dashboard | sop | workflow | issues | issue
- *              | templates | template | users | download | doc | issue_doc
+ *   ?page=login | dashboard | sop | workflow | issues | issue | templates
+ *              | template | exceptions | users | audit | logs | notifications
+ *              | download | doc | issue_doc
  *
  * Every POST is an action guarded by CSRF and by a role permission.
  */

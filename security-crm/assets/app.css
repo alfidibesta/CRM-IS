@@ -1133,7 +1133,6 @@ html[data-density="compact"] .table th,
 html[data-density="compact"] .table td { padding: 5px 8px; }
 
 .filters--tight { margin-bottom: 8px; }
-.filters__sep { flex: 1; }
 
 /* ------------------------------------------------------------ system log -- */
 
@@ -1144,18 +1143,5 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   color: var(--ink-2);
   max-height: 520px; overflow: auto;
 }
-.logpanel > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.logpanel > summary h2 { font-size: 12.5px; letter-spacing: .01em; }
-.logdoc { font-size: 12.5px; }
-.logdoc h2 { font-size: 13px; margin-bottom: 6px; }
-.logsteps { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; }
-.logsteps li { position: relative; padding-left: 16px; color: var(--ink-2); }
-.logsteps li::before { content: "›"; position: absolute; left: 2px; color: var(--orange); font-weight: 700; }
-
 .nav__dot--neutral { background: var(--ink-3); }
 .mono { font-family: var(--mono); }
