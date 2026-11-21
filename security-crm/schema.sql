@@ -2,29 +2,50 @@
 -- Generated from a freshly seeded install. The app also creates and upgrades
 -- every table by itself on the first request, so importing this file is optional.
 --
--- Tables: schema_meta, sops, issues (tags + report form), tasks, users, suspects,
---         issue_files, issue_events, templates, exception_categories, exceptions, cameras,
---         login_attempts, audit_log, notifications
+-- Tables: audit_log, exceptions, exception_categories, issues, issue_events, issue_files, login_attempts, notifications, schema_meta, sops, suspects, tasks, templates, users
 -- Demo sign-in: admin / Admin@123 (see README.md for the other roles).
 
 CREATE DATABASE IF NOT EXISTS `security_crm` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `security_crm`;
 
 /*M!999999\- enable the sandbox mode */ 
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
+DROP TABLE IF EXISTS `audit_log`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `schema_meta` (
-  `id` int(11) NOT NULL,
-  `version` int(11) NOT NULL,
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `audit_log` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `actor_id` int(11) DEFAULT NULL,
+  `actor` varchar(100) NOT NULL DEFAULT '',
+  `role` varchar(20) NOT NULL DEFAULT '',
+  `action` varchar(40) NOT NULL,
+  `entity` varchar(30) NOT NULL DEFAULT '',
+  `entity_id` int(11) DEFAULT NULL,
+  `label` varchar(200) NOT NULL DEFAULT '',
+  `detail` varchar(500) NOT NULL DEFAULT '',
+  `ip` varchar(45) NOT NULL DEFAULT '',
+  `agent` varchar(120) NOT NULL DEFAULT '',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_created` (`created_at`),
+  KEY `idx_audit_actor` (`actor`),
+  KEY `idx_audit_action` (`action`),
+  KEY `idx_audit_entity` (`entity`,`entity_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=98 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `exception_categories`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `exception_categories` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(60) NOT NULL,
@@ -34,6 +55,7 @@ CREATE TABLE `exception_categories` (
   UNIQUE KEY `name` (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `exceptions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `exceptions` (
@@ -62,33 +84,9 @@ CREATE TABLE `exceptions` (
   KEY `idx_exc_category` (`category`)
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `issue_events`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `cameras` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `code` varchar(20) NOT NULL,
-  `name` varchar(120) NOT NULL,
-  `location` varchar(120) NOT NULL DEFAULT '',
-  `zone` varchar(60) NOT NULL DEFAULT 'Perimeter',
-  `stream_url` varchar(255) NOT NULL DEFAULT '',
-  `snapshot_mode` enum('ffmpeg','http','demo') NOT NULL DEFAULT 'demo',
-  `resolution` varchar(10) NOT NULL DEFAULT '1080p',
-  `retention_days` int(11) NOT NULL DEFAULT 30,
-  `status` enum('Online','Offline','Maintenance') NOT NULL DEFAULT 'Online',
-  `notes` varchar(500) NOT NULL DEFAULT '',
-  `last_frame_at` datetime DEFAULT NULL,
-  `frame_file` varchar(90) NOT NULL DEFAULT '',
-  `active` tinyint(1) NOT NULL DEFAULT 1,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `code` (`code`),
-  KEY `idx_cam_status` (`status`),
-  KEY `idx_cam_zone` (`zone`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */
 CREATE TABLE `issue_events` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `issue_id` int(11) NOT NULL,
@@ -101,6 +99,7 @@ CREATE TABLE `issue_events` (
   CONSTRAINT `fk_events_issue` FOREIGN KEY (`issue_id`) REFERENCES `issues` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `issue_files`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `issue_files` (
@@ -120,6 +119,7 @@ CREATE TABLE `issue_files` (
   CONSTRAINT `fk_files_issue` FOREIGN KEY (`issue_id`) REFERENCES `issues` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `issues`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `issues` (
@@ -161,6 +161,7 @@ CREATE TABLE `issues` (
   KEY `idx_issues_template` (`report_template_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `login_attempts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `login_attempts` (
@@ -172,8 +173,39 @@ CREATE TABLE `login_attempts` (
   PRIMARY KEY (`id`),
   KEY `idx_attempts_ip` (`ip`,`created_at`),
   KEY `idx_attempts_user` (`username`,`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `kind` varchar(30) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `body` varchar(400) NOT NULL DEFAULT '',
+  `link` varchar(200) NOT NULL DEFAULT '',
+  `tone` varchar(10) NOT NULL DEFAULT 'neutral',
+  `dedupe` varchar(140) DEFAULT NULL,
+  `read_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_notif_dedupe` (`dedupe`),
+  KEY `idx_notif_user` (`user_id`,`read_at`),
+  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=727 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `schema_meta`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `schema_meta` (
+  `id` int(11) NOT NULL,
+  `version` int(11) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `sops`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `sops` (
@@ -195,6 +227,7 @@ CREATE TABLE `sops` (
   KEY `idx_sops_review` (`review_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `suspects`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `suspects` (
@@ -215,6 +248,7 @@ CREATE TABLE `suspects` (
   CONSTRAINT `fk_suspects_issue` FOREIGN KEY (`issue_id`) REFERENCES `issues` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `tasks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `tasks` (
@@ -232,8 +266,9 @@ CREATE TABLE `tasks` (
   KEY `fk_tasks_issue` (`issue_id`),
   KEY `idx_tasks_column` (`column_key`,`position`),
   CONSTRAINT `fk_tasks_issue` FOREIGN KEY (`issue_id`) REFERENCES `issues` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `templates`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `templates` (
@@ -252,6 +287,7 @@ CREATE TABLE `templates` (
   UNIQUE KEY `code` (`code`)
 ) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `users`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `users` (
@@ -270,45 +306,13 @@ CREATE TABLE `users` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-CREATE TABLE `notifications` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) NOT NULL,
-  `kind` varchar(30) NOT NULL,
-  `title` varchar(200) NOT NULL,
-  `body` varchar(400) NOT NULL DEFAULT '',
-  `link` varchar(200) NOT NULL DEFAULT '',
-  `tone` varchar(10) NOT NULL DEFAULT 'neutral',
-  `dedupe` varchar(140) DEFAULT NULL,
-  `read_at` datetime DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_notif_dedupe` (`dedupe`),
-  KEY `idx_notif_user` (`user_id`,`read_at`),
-  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-CREATE TABLE `audit_log` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `actor_id` int(11) DEFAULT NULL,
-  `actor` varchar(100) NOT NULL DEFAULT '',
-  `role` varchar(20) NOT NULL DEFAULT '',
-  `action` varchar(40) NOT NULL,
-  `entity` varchar(30) NOT NULL DEFAULT '',
-  `entity_id` int(11) DEFAULT NULL,
-  `label` varchar(200) NOT NULL DEFAULT '',
-  `detail` varchar(500) NOT NULL DEFAULT '',
-  `ip` varchar(45) NOT NULL DEFAULT '',
-  `agent` varchar(120) NOT NULL DEFAULT '',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_audit_created` (`created_at`),
-  KEY `idx_audit_actor` (`actor`),
-  KEY `idx_audit_action` (`action`),
-  KEY `idx_audit_entity` (`entity`,`entity_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 

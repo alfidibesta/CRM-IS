@@ -18,9 +18,6 @@ function permission_list(): array
         'page.issues'    => 'Issue register & detail reports',
         'page.templates' => 'Form template library',
         'page.exceptions' => 'EDLP exception register',
-        'page.cctv'      => 'CCTV camera wall',
-        'cctv.manage'    => 'Add / edit / delete cameras',
-        'cctv.capture'   => 'Capture camera frames',
         'page.logs'      => 'System log (errors)',
         'page.users'     => 'Users & authority',
         'page.audit'     => 'Audit trail (read-only)',
@@ -57,7 +54,6 @@ function role_list(): array
             'hint'  => 'Runs the programme: every record plus template control',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
-                'page.cctv', 'cctv.manage', 'cctv.capture',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
                 'task.create', 'task.move', 'task.delete', 'template.edit',
                 'exception.manage', 'exception.category', 'file.download', 'page.audit',
@@ -70,7 +66,6 @@ function role_list(): array
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
                 'page.exceptions', 'exception.manage',
-                'page.cctv', 'cctv.capture',
                 'task.create', 'task.move', 'file.download',
             ],
         ],
@@ -79,7 +74,7 @@ function role_list(): array
             'hint'  => 'Read-only: review, download and export',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
-                'page.exceptions', 'page.cctv', 'file.download', 'issue.export', 'page.audit',
+                'page.exceptions', 'file.download', 'issue.export', 'page.audit',
             ],
         ],
     ];
@@ -111,8 +106,6 @@ function page_permission(string $page): string
         'template'   => 'page.templates',
         'doc'        => 'page.templates',
         'exceptions' => 'page.exceptions',
-        'cctv'       => 'page.cctv',
-        'cctv_frame' => 'page.cctv',
         'logs'       => 'page.logs',
         'users'      => 'page.users',
         'audit'      => 'page.audit',

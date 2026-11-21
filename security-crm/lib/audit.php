@@ -57,12 +57,6 @@ function audit_actions(): array
         'user.update'  => ['User updated', 'red'],
         'user.delete'  => ['User deleted', 'red'],
         'audit.export' => ['Trail exported', 'orange'],
-        'cctv.create'  => ['Camera added', 'blue'],
-        'cctv.update'  => ['Camera updated', 'blue'],
-        'cctv.delete'  => ['Camera deleted', 'red'],
-        'cctv.capture' => ['Frame captured', 'neutral'],
-        'cctv.capture.fail' => ['Frame capture failed', 'red'],
-        'cctv.prune'   => ['Old frames pruned', 'neutral'],
         'logs.view'    => ['System log read', 'neutral'],
     ];
 
@@ -91,7 +85,6 @@ function audit_entities(): array
         'exception'          => 'Exception',
         'exception_category' => 'Exception category',
         'user'               => 'User',
-        'camera'             => 'Camera',
     ];
 }
 

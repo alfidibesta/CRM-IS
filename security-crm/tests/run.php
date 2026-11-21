@@ -17,7 +17,6 @@ require __DIR__ . '/../lib/report.php';
 require __DIR__ . '/../lib/uploads.php';
 require __DIR__ . '/../lib/audit.php';
 require __DIR__ . '/../lib/notify.php';
-require __DIR__ . '/../lib/cctv.php';
 
 $pass = 0;
 $fail = 0;
@@ -134,52 +133,6 @@ ck('notify without pdo is silent', (static function (): bool {
     notify(1, 'issue_due', 'x');
     return true;
 })(), true);
-
-/* ------------------------------------------------------------------ cctv */
-ck('cctv status online', cctv_status_tone('Online'), 'green');
-ck('cctv status offline', cctv_status_tone('Offline'), 'red');
-ck('cctv status maintenance', cctv_status_tone('Maintenance'), 'orange');
-ck('cctv status unknown', cctv_status_tone('Nope'), 'neutral');
-ck('cctv catalogue size', count(cctv_modes()), 3);
-ck('cctv url rtsp ok', cctv_url_ok('rtsp://10.0.0.5:554/stream'), true);
-ck('cctv url https ok', cctv_url_ok('https://cam.local/snap.jpg'), true);
-ck('cctv url file rejected', cctv_url_ok('file:///etc/passwd'), false);
-ck('cctv url javascript rejected', cctv_url_ok('javascript:alert(1)'), false);
-ck('cctv url empty rejected', cctv_url_ok(''), false);
-ck('cctv mode falls back without url', cctv_effective_mode(['snapshot_mode' => 'ffmpeg', 'stream_url' => '']), 'demo');
-ck('cctv mode keeps a valid source', cctv_effective_mode(['snapshot_mode' => 'http', 'stream_url' => 'http://cam/snap.jpg']), 'http');
-ck('cctv summary offline', cctv_summary([
-    ['status' => 'Online', 'snapshot_mode' => 'demo'],
-    ['status' => 'Offline', 'snapshot_mode' => 'http', 'stream_url' => 'http://x/y.jpg'],
-])['offline'], 1);
-ck('cctv summary streams', cctv_summary([
-    ['status' => 'Online', 'snapshot_mode' => 'demo'],
-    ['status' => 'Offline', 'snapshot_mode' => 'http', 'stream_url' => 'http://x/y.jpg'],
-])['streams'], 1);
-ck('cctv safe file', cctv_safe_file('CAM-01-20260101-101010.jpg'), 'CAM-01-20260101-101010.jpg');
-ck('cctv safe file traversal', cctv_safe_file('../app.log'), '');
-ck('cctv safe file script', cctv_safe_file('shell.php'), '');
-ck('cctv age never', cctv_age_label(null), 'never');
-ck('cctv health tone', cctv_health_tone('bad'), 'red');
-ck('cctv health summary', cctv_health_summary([['state' => 'ok'], ['state' => 'warn'], ['state' => 'warn']])['warn'], 2);
-
-/* retention planning — the current frame is kept, expired ones go */
-ck('cctv frame code stream', cctv_frame_code('CAM-01-20261107-101010.jpg'), 'CAM-01');
-ck('cctv frame code demo', cctv_frame_code('CAM-07-demo.jpg'), 'CAM-07');
-ck('cctv frame code foreign', cctv_frame_code('app.log'), '');
-$now   = 1700000000;
-$plan  = cctv_prune_plan([
-    'CAM-01-20260101-000000.jpg' => $now - 40 * 86400,   // 40 d, retention 30 → delete
-    'CAM-01-demo.jpg'            => $now - 400 * 86400,  // current frame → keep
-    'CAM-02-20260101-000000.jpg' => $now - 40 * 86400,   // retention 90 → keep
-    'CAM-03-20260101-000000.jpg' => $now - 5 * 86400,    // retention 30 → keep
-    'notes.txt'                  => $now - 40 * 86400,   // not ours → keep
-    'evidence.jpg'               => $now - 40 * 86400,   // not our naming → keep
-    '.pruned'                    => $now - 400 * 86400, // marker → keep
-], ['CAM-01-demo.jpg' => true], ['CAM-01' => 30, 'CAM-02' => 90, 'CAM-03' => 30], 30, $now);
-ck('cctv prune deletes expired only', $plan['delete'], ['CAM-01-20260101-000000.jpg']);
-ck('cctv prune keeps current, fresh and foreign files', $plan['kept'], 6);
-ck('cctv keep days sane', cctv_keep_days() >= 1, true);
 
 echo $fail === 0
     ? "OK — {$pass} checks passed\n"

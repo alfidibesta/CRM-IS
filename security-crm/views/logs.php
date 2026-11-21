@@ -23,11 +23,9 @@ if (is_file($path) && $size > 0) {
     }
 }
 
-$counts = ['error' => 0, 'cctv' => 0, 'other' => 0];
+$counts = ['error' => 0, 'other' => 0];
 foreach ($lines as $line) {
-    if (mb_stripos($line, 'cctv.') !== false) {
-        $counts['cctv']++;
-    } elseif (preg_match('/\[[^\]]+\]\s+(Error|Exception|ParseError|TypeError|ErrorException)/i', $line) === 1
+    if (preg_match('/\[[^\]]+\]\s+(Error|Exception|ParseError|TypeError|ErrorException)/i', $line) === 1
         || mb_stripos($line, 'Fatal') !== false) {
         $counts['error']++;
     } else {
@@ -45,9 +43,9 @@ audit('logs.view', 'session', null, 'System log', count($lines) . ' line(s) revi
     <p class="stat__hint">uncaught or logged faults in the tail</p>
   </article>
   <article class="card stat stat--orange">
-    <p class="stat__label">Handled failures</p>
-    <p class="stat__value"><?= (int) $counts['cctv'] ?></p>
-    <p class="stat__hint">module actions that could not complete</p>
+    <p class="stat__label">Other entries</p>
+    <p class="stat__value"><?= (int) $counts['other'] ?></p>
+    <p class="stat__hint">informational lines in the tail</p>
   </article>
   <article class="card stat stat--neutral">
     <p class="stat__label">Log size</p>
@@ -63,15 +61,15 @@ audit('logs.view', 'session', null, 'System log', count($lines) . ' line(s) revi
 
 <form class="filters filters--tight" method="get" action="index.php">
   <input type="hidden" name="page" value="logs">
-  <input type="search" name="q" value="<?= e($q) ?>" placeholder="Filter the tail — camera, exception, SQL…">
+  <input type="search" name="q" value="<?= e($q) ?>" placeholder="Filter the tail — error, exception, SQL…">
   <button type="submit" class="btn btn--ghost btn--sm">Filter</button>
   <?php if ($q !== ''): ?>
     <a class="btn btn--ghost btn--sm" href="?page=logs">Clear</a>
   <?php endif; ?>
 </form>
 
-<details class="panel" data-collapse="logs-tail" open>
-  <summary class="cctv-block__head">
+<details class="panel logpanel" data-collapse="logs-tail" open>
+  <summary>
     <h2>Recent entries</h2>
     <span class="muted"><?= count($lines) ?> shown · newest first</span>
   </summary>
@@ -80,16 +78,16 @@ audit('logs.view', 'session', null, 'System log', count($lines) . ' line(s) revi
     <p class="empty empty--sm">Nothing logged <?= $q !== '' ? 'for that filter' : 'yet' ?> — that is the good state.</p>
   <?php else: ?>
     <div class="card card--flush">
-      <pre class="logtail"><?php foreach ($lines as $line): ?><span class="logtail__line<?= mb_stripos($line, 'cctv.') !== false ? ' is-warn' : '' ?>"><?= e($line) ?><?= "\n" ?></span><?php endforeach; ?></pre>
+      <pre class="logtail"><?php foreach ($lines as $line): ?><span class="logtail__line"><?= e($line) ?><?= "\n" ?></span><?php endforeach; ?></pre>
     </div>
   <?php endif; ?>
 </details>
 
-<div class="card cctv-doc">
+<div class="card logdoc">
   <h2>What lands here</h2>
-  <ul class="cctv-steps">
+  <ul class="logsteps">
     <li><b>Uncaught errors</b> — the global handler writes class, message, file and line, then shows the neutral 500 page.</li>
-    <li><b>Handled failures</b> — a camera that will not answer, a stream FFmpeg cannot read, an upload folder that became read-only.</li>
+    <li><b>Handled failures</b> — an upload that could not be stored, a download whose file vanished, an upload folder that became read-only.</li>
     <li><b>Activities</b> are not here: every create, change, delete, sign-in and refusal goes to the append-only <a class="link" href="?page=audit">audit trail</a> instead, with actor, role, address and record.</li>
   </ul>
   <p class="muted">PHP's own error log (<span class="mono">error_log</span>) receives the same uncaught entries, so Apache's log stays useful too. Archive or truncate this file as part of your backup routine; the app never prunes it.</p>

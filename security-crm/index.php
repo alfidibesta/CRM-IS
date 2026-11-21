@@ -46,7 +46,6 @@ require __DIR__ . '/lib/uploads.php';
 require __DIR__ . '/lib/templates.php';
 require __DIR__ . '/lib/word.php';
 require __DIR__ . '/lib/report.php';
-require __DIR__ . '/lib/cctv.php';
 
 $cfg = require __DIR__ . '/config.php';
 
@@ -107,7 +106,7 @@ auth_boot($pdo);
 audit_boot($pdo);
 notify_boot($pdo);
 
-$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'cctv', 'users', 'audit', 'logs', 'notifications', 'download', 'doc', 'issue_doc', 'cctv_frame'];
+$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'audit', 'logs', 'notifications', 'download', 'doc', 'issue_doc'];
 
 /** POST target: ?page=X ( + id ) — validated against the page whitelist. */
 function back_to(string $back, int $id = 0): void
@@ -151,11 +150,6 @@ function action_permission(string $action): ?string
         'delete_exception_category' => 'exception.category',
         'notifications_read' => 'page.dashboard',
         'notification_read'  => 'page.dashboard',
-        'camera_save'    => 'cctv.manage',
-        'camera_delete'  => 'cctv.manage',
-        'camera_capture' => 'cctv.capture',
-        'camera_capture_all' => 'cctv.capture',
-        'camera_prune'   => 'cctv.manage',
         'create_user'    => 'user.manage',
         'update_user'    => 'user.manage',
         'delete_user'    => 'user.manage',
@@ -220,102 +214,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     switch ($action) {
-        case 'camera_save':
-            $camId   = (int) ($_POST['id'] ?? 0);
-            $code    = mb_strtoupper((string) preg_replace('/[^A-Za-z0-9-]+/', '-', clamp($_POST['code'] ?? '', 20)));
-            $name    = clamp($_POST['name'] ?? '', 120);
-            $mode    = array_key_exists((string) ($_POST['snapshot_mode'] ?? ''), cctv_modes()) ? (string) $_POST['snapshot_mode'] : 'demo';
-            $url     = trim(clamp($_POST['stream_url'] ?? '', 255));
-            $zone    = in_array($_POST['zone'] ?? '', cctv_zones(), true) ? (string) $_POST['zone'] : 'Other';
-            $resTag  = in_array($_POST['resolution'] ?? '', cctv_resolution_list(), true) ? (string) $_POST['resolution'] : '1080p';
-            $status  = in_array($_POST['status'] ?? '', cctv_status_list(), true) ? (string) $_POST['status'] : 'Online';
-            $keep    = max(1, min(365, (int) ($_POST['retention_days'] ?? 30)));
-            $notes   = clamp($_POST['notes'] ?? '', 500);
-            $loc     = clamp($_POST['location'] ?? '', 120);
-
-            if ($code === '' || $name === '') {
-                $_SESSION['form_error'] = 'A camera code and a name are required.';
-                back_to('cctv');
-            }
-            if ($url !== '' && !cctv_url_ok($url)) {
-                $_SESSION['form_error'] = 'The stream URL must start with rtsp://, rtmp:// or http(s)://.';
-                back_to('cctv');
-            }
-            if ($mode !== 'demo' && $url === '') {
-                $_SESSION['form_error'] = cctv_modes()[$mode] . ' needs a stream URL.';
-                back_to('cctv');
-            }
-
-            $dupe = $pdo->prepare('SELECT id FROM cameras WHERE code = ? AND id <> ?');
-            $dupe->execute([$code, $camId]);
-            if ($dupe->fetchColumn()) {
-                $_SESSION['form_error'] = 'Camera code ' . $code . ' is already in use.';
-                back_to('cctv');
-            }
-
-            if ($camId > 0) {
-                $pdo->prepare('UPDATE cameras SET code=?, name=?, location=?, zone=?, stream_url=?, snapshot_mode=?,
-                                      resolution=?, retention_days=?, status=?, notes=? WHERE id=?')
-                    ->execute([$code, $name, $loc, $zone, $url, $mode, $resTag, $keep, $status, $notes, $camId]);
-                audit('cctv.update', 'camera', $camId, $code,
-                    $name . ' · ' . $mode . ' · ' . $status . (($url !== '') ? ' · ' . $url : ''));
-                flash('Camera ' . $code . ' saved.');
-            } else {
-                $pdo->prepare('INSERT INTO cameras (code, name, location, zone, stream_url, snapshot_mode, resolution,
-                                      retention_days, status, notes) VALUES (?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([$code, $name, $loc, $zone, $url, $mode, $resTag, $keep, $status, $notes]);
-                audit('cctv.create', 'camera', (int) $pdo->lastInsertId(), $code,
-                    $name . ' · ' . $mode . ' · ' . $status);
-                flash('Camera ' . $code . ' added to the wall.');
-            }
-            back_to('cctv');
-
-        case 'camera_capture':
-            $cam = cctv_camera($pdo, (int) ($_POST['id'] ?? 0));
-            if (!$cam) {
-                flash('That camera no longer exists.');
-                back_to('cctv');
-            }
-            $shot = cctv_capture($pdo, $cam);
-            flash($shot['ok']
-                ? 'Frame captured from ' . $cam['code'] . ' (' . $shot['mode'] . ').'
-                : 'Capture failed for ' . $cam['code'] . ': ' . (string) ($shot['error'] ?? 'unknown error'));
-            back_to('cctv');
-
-        case 'camera_capture_all':
-            $shots = 0;
-            $list  = $pdo->query('SELECT * FROM cameras WHERE active = 1 ORDER BY code')->fetchAll();
-            foreach ($list as $cam) {
-                if (cctv_capture($pdo, $cam)['ok']) {
-                    $shots++;
-                }
-            }
-            flash($shots . ' of ' . count($list) . ' camera frames captured at ' . date('H:i') . '.');
-            back_to('cctv');
-
-        case 'camera_delete':
-            $cam = cctv_camera($pdo, (int) ($_POST['id'] ?? 0));
-            if ($cam) {
-                $path = cctv_frame_path((string) $cam['frame_file']);
-                if ($path !== '' && is_file($path)) {
-                    @unlink($path);
-                }
-                $pdo->prepare('DELETE FROM cameras WHERE id = ?')->execute([(int) $cam['id']]);
-                audit('cctv.delete', 'camera', (int) $cam['id'], (string) $cam['code'], (string) $cam['name']);
-                flash('Camera ' . $cam['code'] . ' removed from the wall.');
-            }
-            back_to('cctv');
-
-        case 'camera_prune':
-            $res = cctv_prune($pdo);
-            audit('cctv.prune', 'camera', null, 'CCTV frames',
-                $res['removed'] . ' old frame(s) removed · ' . human_size($res['bytes']) . ' freed (manual)'
-                . ($res['failed'] > 0 ? ' · ' . $res['failed'] . ' failed' : ''));
-            flash($res['removed'] === 0
-                ? 'No frame was older than its retention — nothing deleted.'
-                : $res['removed'] . ' old frame(s) removed, ' . human_size($res['bytes']) . ' freed.');
-            back_to('cctv');
-
         case 'create_issue':
             $category = in_array($_POST['category'] ?? '', ['Physical Security', 'IT Security', 'Strain Security'], true) ? $_POST['category'] : 'IT Security';
             $severity = in_array($_POST['severity'] ?? '', ['Critical', 'High', 'Medium', 'Low'], true) ? $_POST['severity'] : 'Medium';
@@ -1059,32 +957,6 @@ if ($page === 'login') {
 require_login();
 require_permission(page_permission($page));
 
-/* ------------------------------------------------------------ cctv frames */
-
-// Frames live in uploads/cctv (denied by .htaccess/router.php) and are only
-// readable through this permission-checked route.
-if ($page === 'cctv_frame') {
-    $cam  = cctv_camera($pdo, (int) ($_GET['id'] ?? 0));
-    $path = $cam ? cctv_frame_path((string) $cam['frame_file']) : '';
-
-    if (!$cam || $path === '' || !is_file($path)) {
-        http_response_code(404);
-        header('Content-Type: text/plain; charset=utf-8');
-        exit('No frame captured yet.');
-    }
-
-    $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    $type = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'svg' => 'image/svg+xml'][$ext] ?? 'application/octet-stream';
-
-    header('Content-Type: ' . $type);
-    header('Content-Length: ' . filesize($path));
-    header('Cache-Control: private, no-store, max-age=0');
-    header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: inline; filename="' . basename($path) . '"');
-    readfile($path);
-    exit;
-}
-
 // Time-based alerts (due issues, expiring exceptions, document reviews) are
 // worked out on page load. The sweep is deduped per day, so no cron is needed
 // and a POST never pays for it.
@@ -1221,7 +1093,6 @@ $titles = [
     'issue'     => ['Issue Detail Report', 'Full investigation record, evidence and sign-off'],
     'templates' => ['Form Templates', 'NDA, agreements and controlled forms — download as Word'],
     'template'  => ['Template Detail', 'Preview, fill in and download as .docx'],    'exceptions' => ['EDLP Exceptions', 'Approved deviations for USB, websites, cameras and more'],
-    'cctv'      => ['CCTV Wall', 'Live views, frame capture and camera health'],
     'logs'      => ['System Log', 'Errors and handled failures written by the application'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
     'audit'     => ['Audit Trail', 'Every recorded change, who made it and from where'],
@@ -1237,12 +1108,6 @@ if ($page === 'issue' || $page === 'template') {
         http_response_code(404);
         $titles[$page] = ['Not found', 'That record does not exist any more'];
     }
-}
-
-// Retention sweep: once a day, on an ordinary CCTV page view, so no cron job is
-// needed. Current frames are always kept (see cctv_prune_plan()).
-if ($page === 'cctv') {
-    cctv_prune_if_due($pdo);
 }
 
 require __DIR__ . '/views/header.php';

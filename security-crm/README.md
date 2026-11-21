@@ -53,7 +53,7 @@ above always works.
 ### 4. Let the first request build the database
 
 Nothing to import. On the first page load the app connects as `root` (Laragon's
-default, empty password), creates the `security_crm` database and its **eleven
+default, empty password), creates the `security_crm` database and its **fourteen
 tables**, then seeds sample data — SOPs, 12 issues, 12 templates, 10 EDLP
 exceptions — plus the four demo accounts below. The sign-in page appears once
 that second or two of setup finishes.
@@ -90,8 +90,6 @@ or set environment variables, which take precedence:
 | `SECOPS_DB_PASS` | *(empty)* | database password |
 | `SECOPS_DB_NAME` | `security_crm` | database name (created if missing) |
 | `SECOPS_DEMO` | `1` | `0` hides the demo accounts on the sign-in screen |
-| `SECOPS_FFMPEG` | *(auto)* | full path to `ffmpeg.exe` when it is not in Laragon's `bin\ffmpeg\bin` |
-| `SECOPS_CCTV_KEEP_DAYS` | `30` | how long frames of deleted or unknown cameras are kept before the daily sweep removes them |
 
 On Apache, `SetEnv SECOPS_DB_USER secops` inside the vhost (or the folder's
 `.htaccess`) works; with the built-in server, prefix the command.
@@ -134,6 +132,74 @@ php -S localhost:8000 router.php
 5 failed passwords lock an account for 15 minutes. Add or change accounts on
 **Users & Authority** (admin only).
 
+## Features
+
+- **Dashboard** — open and overdue counts, issues by category, risk ratings,
+  documents due for review, and the six latest audit entries.
+- **SOP & Policy library** — type (Policy / SOP / Guideline), scope, version,
+  owner, status and review date; the controlled text expands inline.
+- **Workflow board** — five columns, drag and drop with the order saved on drop,
+  priority/owner/due date, optional link to an issue.
+- **Issue register and report** — category, severity, tags, search and quick
+  status change; the report adds the 5x5 risk assessment, heatmap, root cause,
+  actions, persons involved, evidence, activity log and `.docx` export.
+- **Form templates** — controlled forms stored as light markup, previewed on
+  screen, filled with placeholders and downloaded as real Word files.
+- **EDLP exceptions** — approved deviations with target, period, justification,
+  compensating control and derived Active / Expiring / Expired state; adjustable
+  categories.
+- **Notifications** — assignment, critical issue, due date, expiring exception
+  and SOP review alerts, deduped per day, with unread/all filters.
+- **Audit trail and system log** — every action recorded and exportable as CSV;
+  the administrator-only log page shows handled and uncaught failures.
+- **Users and authority** — four roles, a rendered permission matrix, lockout
+  after five failures, throttling per address, password reset by an admin.
+
+## How to use it
+
+**Report an issue.** *Issues* -> **New issue**: title, category, severity and the
+likelihood/impact pair; the risk score and rating are derived. Save, and the full
+report opens.
+
+**Investigate.** On the issue page, edit the fields, change status, add notes,
+add persons involved (primary, witness, victim...), upload evidence (photos,
+logs, statements) and create follow-up tasks.
+
+**Produce the Word report.** Pick a *Report form* template on the issue. The
+layout is pre-filled from that form and can be adjusted for this report only;
+**Download .docx** fills it with the issue's own data and appends risk, persons,
+evidence, tasks, activity and sign-off as annexes.
+
+**Track deviations.** *EDLP Exceptions* -> add the target, period, justification
+and compensating control. The state follows the dates; categories can be added,
+renamed (records follow), restyled or deleted when unused.
+
+**Keep documents current.** *SOP & Policy* lists every controlled document with
+version, status and review date; dashboard stats and alerts flag reviews that
+are due.
+
+**Review and prove it.** *Audit trail* filters by action, record type, actor,
+free text and date and exports the current view as CSV. *Users & Authority*
+shows the role matrix and manages accounts.
+
+### Upgrading from an earlier build
+
+`SCHEMA_VERSION` in `lib/db.php` bumps once per schema change; `migrate()` only
+adds missing tables, columns and indexes, so an existing database keeps its data.
+
+This build **removes the CCTV module**. `lib/cctv.php`, `views/cctv.php` and the
+`uploads/cctv/` folder are gone, and no new `cameras` table is created. An older
+database still holds its `cameras` table — nothing drops it for you. Back up,
+then remove it when you are ready:
+
+```bash
+mysqldump -u root -p security_crm > backup-before-drop.sql
+mysql -u root -p security_crm -e "DROP TABLE cameras;"
+```
+
+The audit trail is append-only, so earlier camera entries stay in the history
+and now show their raw action key (for example `cctv.prune`).
+
 ## Pages
 
 | URL | What it is |
@@ -147,10 +213,9 @@ php -S localhost:8000 router.php
 | `?page=templates` | Form template library — NDA, supplier & manufacturing agreement, visitor undertaking, incident report, audit checklist… filter, search, one-click Word download |
 | `?page=template&id=N` | Fill in the placeholders, live document preview, download `.docx`, list of issue reports that use this form, edit the source (editors only) |
 | `?page=exceptions` | **EDLP exception register** — USB, websites, cameras, cloud apps…: adjustable categories, validity period with expiring/expired state, detail, justification, compensating control, category manager |
-| `?page=cctv` | **CCTV wall** — compact camera tiles with the latest frame, status, zone and retention; filters, capture and a system check. Frames are pulled server-side (FFmpeg, HTTP snapshot or a generated demo frame) |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
 | `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters and a CSV export |
-| `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and handled failures such as a camera that will not answer |
+| `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and handled failures such as an upload that could not be stored |
 
 Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 (template), `?page=download&file=N` (evidence file), `?page=audit&export=csv`
@@ -168,9 +233,6 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Create / edit / delete templates | ✓ | ✓ | — | — |
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
 | Manage exception categories | ✓ | ✓ | — | — |
-| View the CCTV wall | ✓ | ✓ | ✓ | ✓ |
-| Capture camera frames | ✓ | ✓ | ✓ | — |
-| Add / edit / delete cameras | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |
 | Download files & export `.docx` | ✓ | ✓ | ✓ | ✓ |
 | Read the audit trail | ✓ | ✓ | — | ✓ |
@@ -211,61 +273,16 @@ compensating control and who approved it. State is derived: **Active**,
 Categories live in `exception_categories` and are fully adjustable — add, rename
 (records follow), restyle or delete when unused.
 
-## CCTV wall, FFmpeg and themes
+## Themes, density and panels
 
 **Bright or dim.** The two buttons in the top bar switch the palette and the
 spacing. Both choices are stored in the browser (not in the account), are
-applied before the first paint so nothing flashes, and never change layout —
-the wall stays compact either way. **Compact** trims padding, table rows and
-tile size; **Dim** is the dark palette.
+applied before the first paint so nothing flashes, and never change layout.
+**Compact** trims padding, table rows and gaps; **Dim** is the dark palette.
 
-**Collapsible panels.** Every panel header (camera wall, add/edit camera,
-system check, runbook, log tail) is a native `<details>` that remembers whether
-you left it open.
-
-**How a frame is captured.** The web server, never the browser, talks to the
-camera:
-
-| Source | Needs | Used for |
-| --- | --- | --- |
-| FFmpeg stream | `ffmpeg` binary | RTSP / RTMP / HLS cameras, one still per capture |
-| HTTP snapshot | `curl` | cameras that expose a JPEG URL |
-| Demo frame | `gd` | layout and training; drawn locally, clearly watermarked |
-
-Frames are written to `uploads/cctv/` and served only through
-`?page=cctv_frame&id=N` after the permission check, with `no-store` so a
-capture is never hidden behind a cached image.
-
-**Retention.** Each camera's current frame is always kept; every older frame is
-deleted once it passes that camera's *retention days* (1–365). The sweep runs at
-most once a day from an ordinary CCTV page view — no cron job — and **Clean up
-old frames** in the system check runs it on demand (`cctv.manage`). Frames whose
-camera no longer exists fall back to `SECOPS_CCTV_KEEP_DAYS` (default 30), and
-names the module did not write are left alone. Every sweep is recorded in the
-audit trail as `cctv.prune`; the system check's *Frame storage* row shows the
-file count, total size and age.
-
-**Add FFmpeg to Laragon (no package manager needed).**
-
-1. Download a *release essentials* Windows build from `gyan.dev/ffmpeg/builds`
-   (or `github.com/BtbN/FFmpeg-Builds`).
-2. Rename the extracted folder to `ffmpeg` and place it at
-   `C:\laragon\bin\ffmpeg\bin\ffmpeg.exe`. The app checks that path directly, so
-   nothing needs to be added to `PATH`.
-3. Laragon → **Reload** (or restart Apache), then open `?page=cctv` → **System
-   check**: the row turns green and shows the FFmpeg version.
-4. Verify by hand: `C:\laragon\bin\ffmpeg\bin\ffmpeg.exe -version`.
-5. Installed elsewhere? Add `SetEnv SECOPS_FFMPEG "C:/tools/ffmpeg/ffmpeg.exe"`
-   to `security-crm/.htaccess` (or the vhost), or export the same variable for
-   the built-in server. Forward slashes on Windows.
-6. If capture reports *proc_open is disabled*, remove `proc_open` from
-   `disable_functions` in `php.ini` and restart Apache. Capture runs as a
-   short-lived child process capped at 8 seconds.
-
-Without FFmpeg the wall still works: HTTP snapshots use cURL, every other
-tile renders its demo frame, and the system check explains what is missing
-instead of failing silently. Capture failures are written to `logs/app.log`
-and to the audit trail, and appear under **System log**.
+**Collapsible panels.** Detail panels — an issue's report form, the exception
+categories, the log tail — are native `<details>` elements that remember
+whether you left them open.
 
 ## Word export
 
@@ -296,7 +313,7 @@ lib/auth.php         roles, permission catalogue, login, lockout, 401/403
 lib/db.php           PDO connection, schema migration, per-table seed
 lib/helpers.php      escaping, badges, CSRF, flash, tag + exception helpers
 lib/uploads.php      upload validation (whitelist, size, mime) + effective limit
-lib/cctv.php         camera register, FFmpeg/HTTP/demo capture, retention sweep, health checks
+lib/notify.php       alert rules: assignment, critical, due, expiring, review
 lib/templates.php     template markup -> HTML blocks
 lib/word.php         OOXML (.docx) writer + ZIP encoder
 lib/report.php        risk scoring, report-form binding, issue report .docx blocks
@@ -359,6 +376,16 @@ actor, free text and date range; **Export CSV** writes the current filter as an 
 dashboard shows the six most recent entries. Retention follows your database backup policy — the app
 never prunes the table, so archive it yourself if it grows large.
 
+## Known limitations
+
+- **One plant, one database.** There is no tenant or site switch; a second plant
+  needs a second copy and database.
+- **Files live on local disk.** Evidence and `logs/app.log` are not replicated;
+  include `security-crm/uploads/` and the database in the same backup.
+- **Search is SQL `LIKE`.** Fine for a few thousand rows, not a search engine.
+- **Exports are `.docx` only.** PDF would need an external converter.
+- **No email.** Alerts are in-app; nothing leaves the server.
+
 ## Security notes
 
 - Sign-in required for every page; roles are enforced server-side on both pages
@@ -405,5 +432,5 @@ gzip on;
 ### Tests
 
 ```bash
-php tests/run.php     # 85 unit checks: tags, risk, clamping, dates, parsing, CCTV, retention
+php tests/run.php     # 59 unit checks: tags, risk, clamping, dates, parsing, audit, notifications
 ```
