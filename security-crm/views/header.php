@@ -113,6 +113,24 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
         <span class="pill">ISO 27001 scope</span>
         <span class="pill pill--date"><?= date('D, d M Y') ?></span>
 
+        <?php if ($help = help_for($page)): ?>
+          <details class="bell help">
+            <summary class="bell__btn" title="How this page works">
+              Help <span class="help__mark" aria-hidden="true">?</span>
+            </summary>
+            <div class="bell__panel help__panel">
+              <div class="bell__head"><strong><?= e($help['title']) ?></strong></div>
+              <p class="help__intro"><?= e($help['summary']) ?></p>
+              <ol class="help__steps">
+                <?php foreach ($help['steps'] as $step): ?>
+                  <li><?= e($step) ?></li>
+                <?php endforeach; ?>
+              </ol>
+              <p class="help__tip"><strong>Tip</strong> <?= e($help['tip']) ?></p>
+            </div>
+          </details>
+        <?php endif; ?>
+
         <?php $bell = notify_summary($pdo); ?>
         <details class="bell">
           <summary class="bell__btn" aria-label="Notifications, <?= (int) $bell['unread'] ?> unread">

@@ -350,6 +350,16 @@ applied before the first paint so nothing flashes, and never change layout.
 categories, the log tail — are native `<details>` elements that remember
 whether you left them open.
 
+## Help
+
+Every screen carries a **Help** button next to the date pill. It opens a short
+panel for the page you are on — what the screen is for, the steps for its
+actions and one tip — so nobody has to leave the record they are looking at.
+The entries live in `lib/help.php`, one per page.
+
+The full manual is [help.md](help.md): sign-in and roles, every register, the
+Word exports, data conventions and troubleshooting.
+
 ## Offline
 
 Nothing on any screen is fetched from the internet: every stylesheet, script, icon and font

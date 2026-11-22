@@ -39,6 +39,7 @@ set_exception_handler(function (Throwable $e): void {
 });
 
 require __DIR__ . '/lib/helpers.php';
+require __DIR__ . '/lib/help.php';
 require __DIR__ . '/lib/audit.php';   // migrate() seals the trail, so load it first
 require __DIR__ . '/lib/db.php';
 require __DIR__ . '/lib/auth.php';

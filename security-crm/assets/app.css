@@ -1055,7 +1055,6 @@ ul, ol { padding: 0; list-style: none; }
   .factstrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topbar { flex-wrap: wrap; align-items: flex-start; }
   .topbar__meta { justify-content: flex-start; }
-  .bell__panel { right: auto; left: 0; }
 }
 @media (max-width: 620px) {
   .grid--stats { grid-template-columns: minmax(0, 1fr); }
@@ -1113,6 +1112,42 @@ ul, ol { padding: 0; list-style: none; }
 .bell__dot--neutral { background: var(--ink-3); }
 .bell__empty { padding: 12px 8px; color: var(--ink-3); font-size: 12px; }
 .bell__foot { display: flex; justify-content: flex-end; padding: 6px 4px 2px; border-top: 1px solid var(--line-2); }
+
+/* -------------------------------------------------------------- help panel */
+.help__mark { font-weight: 700; color: var(--blue); }
+.help__panel { width: 380px; max-width: min(380px, 92vw); }
+.help__intro { padding: 8px 6px 0; font-size: 12.5px; color: var(--ink-2); }
+.help__steps {
+  counter-reset: help; list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 6px 4px; margin: 0;
+}
+.help__steps li { position: relative; padding-left: 21px; font-size: 12px; color: var(--ink-2); }
+.help__steps li::before {
+  counter-increment: help; content: counter(help);
+  position: absolute; left: 0; top: 1px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--blue-soft); color: var(--blue);
+  font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
+}
+.help__tip {
+  margin: 4px 6px 2px; padding: 7px 8px;
+  background: var(--bg); border-left: 2px solid var(--blue); border-radius: var(--radius-sm);
+  font-size: 11.5px; color: var(--ink-3);
+}
+.help__tip strong { color: var(--ink-2); }
+
+/* Narrow screens: a popover anchored to its button would run past the right
+   edge. Dropping the button's positioning makes the top bar the container, so
+   the panel sits under the buttons, fits the width and scrolls with the page. */
+@media (max-width: 900px) {
+  .topbar { position: relative; }
+  .topbar__meta > .bell { position: static; }
+  .bell__panel, .help__panel {
+    position: absolute; left: 12px; right: auto; top: auto;
+    width: calc(100% - 24px); max-width: 520px;
+  }
+}
 .row--unread { background: var(--blue-soft); }
 
 /* ------------------------------------------------- theme: bright / dim ---- */
