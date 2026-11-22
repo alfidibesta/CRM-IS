@@ -169,6 +169,8 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
 
 <p class="footnote">
   Entries are written by the application and never edited: no screen updates or deletes them.
+  Each entry is also chained to the one before it by a SHA-256 hash — <span class="mono">php tests/verify-audit.php</span>
+  re-reads the table and names the first entry that no longer matches.
   Coverage — sign-in, sign-out, refused actions, issues, status changes, report forms, notes, people,
   evidence, tasks, templates, exceptions, categories, users and exports. Export the filtered view as CSV
   for an audit pack; retention follows your database backup policy.

@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261121;
+const SCHEMA_VERSION = 20261122;
 
 function db(array $cfg): PDO
 {
@@ -168,6 +168,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail     VARCHAR(500) NOT NULL DEFAULT '',
     ip         VARCHAR(45)  NOT NULL DEFAULT '',
     agent      VARCHAR(120) NOT NULL DEFAULT '',
+    prev_hash  CHAR(64) NOT NULL DEFAULT '',
+    row_hash   CHAR(64) NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_audit_created (created_at),
     INDEX idx_audit_actor (actor),
@@ -318,6 +320,17 @@ SQL;
     ensure_indexes($pdo, 'sops', ['idx_sops_review' => 'review_at']);
     ensure_indexes($pdo, 'exceptions', ['idx_exc_category' => 'category']);
     ensure_indexes($pdo, 'tasks', ['idx_tasks_column' => 'column_key, position']);
+
+    // Tamper-evident trail (20261122): two hash columns on audit_log. Existing
+    // entries are sealed once, in id order, here; entries that already carry a
+    // hash are never rewritten, so a tampered chain stays tampered.
+    ensure_columns($pdo, 'audit_log', [
+        'prev_hash' => "CHAR(64) NOT NULL DEFAULT ''",
+        'row_hash'  => "CHAR(64) NOT NULL DEFAULT ''",
+    ]);
+    if (function_exists('audit_seal_pending')) {
+        audit_seal_pending($pdo);
+    }
 }
 
 /** Add missing columns to an existing table (no-op when present). */
@@ -382,7 +395,7 @@ function seedIfEmpty(PDO $pdo): void
     if ($empty('issue_extras')) { seed_issue_extras($pdo); }
     if ($empty('exceptions') || $empty('categories')) { seed_exceptions($pdo); }
     if ($empty('suspects') || $empty('events')) { seed_activity($pdo); }
-    if ($empty('audit'))       { seed_audit($pdo); }
+    if ($empty('audit'))       { seed_audit($pdo); if (function_exists('audit_seal_pending')) { audit_seal_pending($pdo); } }
     if ($empty('notifications')) { seed_notifications($pdo); }
 }
 

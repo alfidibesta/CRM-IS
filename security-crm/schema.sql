@@ -35,6 +35,8 @@ CREATE TABLE `audit_log` (
   `detail` varchar(500) NOT NULL DEFAULT '',
   `ip` varchar(45) NOT NULL DEFAULT '',
   `agent` varchar(120) NOT NULL DEFAULT '',
+  `prev_hash` char(64) NOT NULL DEFAULT '',
+  `row_hash` char(64) NOT NULL DEFAULT '',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_audit_created` (`created_at`),

@@ -10,6 +10,12 @@ declare(strict_types=1);
  * client. The table is only ever inserted into and read: nothing updates or
  * deletes a row, so the trail stays a record of what happened.
  *
+ * Append-only by convention is not the same as tamper-evident, so every entry
+ * also carries `prev_hash` (the hash of the entry before it) and `row_hash`
+ * (SHA-256 over its own stored fields plus that link). Changing a row, deleting
+ * one from the middle or inserting one behind the application's back breaks the
+ * chain, and audit_verify() names the first entry that no longer matches.
+ *
  * audit_boot() receives the PDO handle once in index.php; audit() then works
  * from anywhere, including lib/auth.php, which has no $pdo of its own.
  */
@@ -138,6 +144,8 @@ function audit(
         return;
     }
 
+    $ownTxn = false;
+
     try {
         $user = function_exists('current_user') ? current_user() : null;
 
@@ -154,12 +162,212 @@ function audit(
             'agent'     => mb_substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 120),
         ];
 
+        // The chain is a single line, so the writer reads the current tail and
+        // appends under a row lock: two simultaneous events cannot both link
+        // to the same predecessor.
+        if (!$pdo->inTransaction()) {
+            $pdo->beginTransaction();
+            $ownTxn = true;
+        }
+
+        $tail = $pdo->query('SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1 FOR UPDATE')->fetchColumn();
+        $prev = is_string($tail) ? $tail : '';
+
         $pdo->prepare('INSERT INTO audit_log (actor_id, actor, role, action, entity, entity_id, label, detail, ip, agent)
                        VALUES (:actor_id, :actor, :role, :action, :entity, :entity_id, :label, :detail, :ip, :agent)')
             ->execute($row);
+
+        $id = (int) $pdo->lastInsertId();
+
+        // Hash what the database actually stored — defaults, truncation and
+        // NULLs included — so the verifier recomputes the same bytes.
+        $st = $pdo->prepare('SELECT * FROM audit_log WHERE id = ?');
+        $st->execute([$id]);
+        $saved = $st->fetch() ?: [];
+        $hash = audit_row_hash($saved, $prev);
+
+        $pdo->prepare('UPDATE audit_log SET prev_hash = ?, row_hash = ? WHERE id = ?')
+            ->execute([$prev, $hash, $id]);
+
+        if ($ownTxn) {
+            $pdo->commit();
+        }
     } catch (Throwable $e) {
+        if ($ownTxn && $pdo->inTransaction()) {
+            try {
+                $pdo->rollBack();
+            } catch (Throwable) {
+                // The trail is best-effort; the caller's action still stands.
+            }
+        }
         error_log('audit write failed: ' . $e->getMessage());
     }
+}
+
+/* ------------------------------------------------------------ hash chain */
+
+/** Fields sealed into an entry's hash, in a fixed order. */
+function audit_hash_fields(): array
+{
+    return ['id', 'created_at', 'actor_id', 'actor', 'role', 'action',
+            'entity', 'entity_id', 'label', 'detail', 'ip', 'agent'];
+}
+
+/**
+ * Canonical bytes for one link: the entry's own fields plus the hash of the
+ * entry before it.
+ *
+ * JSON is used because it is unambiguous — a value cannot forge a field
+ * boundary, and NULL stays distinct from the empty string.
+ */
+function audit_hash_payload(array $row, string $prevHash): string
+{
+    $values = [];
+    foreach (audit_hash_fields() as $field) {
+        $values[$field] = $row[$field] ?? null;
+    }
+    $values['prev_hash'] = $prevHash;
+
+    return (string) json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+
+/** The stored hash for one entry: SHA-256 over its payload. */
+function audit_row_hash(array $row, string $prevHash): string
+{
+    return hash('sha256', audit_hash_payload($row, $prevHash));
+}
+
+/**
+ * Walk an ordered list of entries and report the first one that does not
+ * match its own hash or the entry before it.
+ *
+ * Pure: no database, so tests can hand it rows. $prevHash is the hash the
+ * first entry is expected to link to (empty for the very first entry).
+ *
+ * @return array{ok: bool, checked: int, broken: ?array, head: ?int, tail: string}
+ */
+function audit_chain_check(array $rows, string $prevHash = ''): array
+{
+    $prev    = $prevHash;
+    $checked = 0;
+    $broken  = null;
+    $head    = null;
+
+    foreach ($rows as $row) {
+        $checked++;
+        $id = (int) ($row['id'] ?? 0);
+        if ($head === null) {
+            $head = $id;
+        }
+
+        $stored = (string) ($row['row_hash'] ?? '');
+        $link   = (string) ($row['prev_hash'] ?? '');
+
+        if ($broken === null) {
+            if ($stored === '') {
+                $broken = ['id' => $id, 'reason' => 'missing'];
+            } elseif (!hash_equals($prev, $link)) {
+                $broken = ['id' => $id, 'reason' => 'link'];
+            } elseif (!hash_equals(audit_row_hash($row, $link), $stored)) {
+                $broken = ['id' => $id, 'reason' => 'content'];
+            }
+        }
+
+        // Follow what is stored, so the next entry is judged against the entry
+        // that actually sits before it.
+        $prev = $stored;
+    }
+
+    return ['ok' => $broken === null, 'checked' => $checked, 'broken' => $broken,
+            'head' => $head, 'tail' => $prev];
+}
+
+/**
+ * Verify the whole trail, in id order, in chunks.
+ *
+ * @return array{ok: bool, checked: int, broken: ?array, head: ?int, newest: ?int, tail: string}
+ */
+function audit_verify(PDO $pdo, int $limit = 0): array
+{
+    $seen    = 0;
+    $afterId = 0;
+    $prev    = '';
+    $broken  = null;
+    $head    = null;
+    $newest  = null;
+
+    while (true) {
+        $take = 500;
+        if ($limit > 0) {
+            $take = min($take, $limit - $seen);
+            if ($take <= 0) {
+                break;
+            }
+        }
+
+        // LIMIT cannot be bound portably through emulated prepares.
+        $chunk = $pdo->prepare('SELECT * FROM audit_log WHERE id > ' . $afterId . ' ORDER BY id LIMIT ' . $take);
+        $chunk->execute();
+        $rows = $chunk->fetchAll();
+        if (!$rows) {
+            break;
+        }
+
+        $step = audit_chain_check($rows, $prev);
+        if ($broken === null && !$step['ok']) {
+            $broken = $step['broken'];
+        }
+        if ($head === null) {
+            $head = $step['head'];
+        }
+        $seen  += $step['checked'];
+        $prev   = $step['tail'];
+        $last   = end($rows);
+        $afterId = (int) $last['id'];
+        $newest = $afterId;
+    }
+
+    return ['ok' => $broken === null, 'checked' => $seen, 'broken' => $broken,
+            'head' => $head, 'newest' => $newest, 'tail' => $prev];
+}
+
+/**
+ * Seal entries that carry no hash yet, in id order.
+ *
+ * Used by the migration and the seed for rows written before the chain
+ * existed. Rows that already have a hash are never rewritten — re-sealing an
+ * altered trail would erase the evidence — so a direct MySQL edit stays
+ * visible where it belongs instead of quietly becoming valid.
+ */
+function audit_seal_pending(PDO $pdo): int
+{
+    $sealed  = 0;
+    $afterId = 0;
+    $prev    = '';
+    $update  = $pdo->prepare('UPDATE audit_log SET prev_hash = ?, row_hash = ? WHERE id = ?');
+
+    while (true) {
+        $st = $pdo->prepare('SELECT * FROM audit_log WHERE id > ' . $afterId . ' ORDER BY id LIMIT 500');
+        $st->execute();
+        $rows = $st->fetchAll();
+        if (!$rows) {
+            break;
+        }
+
+        foreach ($rows as $row) {
+            $id     = (int) $row['id'];
+            $stored = (string) ($row['row_hash'] ?? '');
+            if ($stored === '') {
+                $stored = audit_row_hash($row, $prev);
+                $update->execute([$prev, $stored, $id]);
+                $sealed++;
+            }
+            $prev    = $stored;
+            $afterId = $id;
+        }
+    }
+
+    return $sealed;
 }
 
 /** Normalise the filter form / query string. Unknown values are dropped. */

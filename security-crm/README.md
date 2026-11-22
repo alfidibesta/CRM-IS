@@ -150,8 +150,9 @@ php -S localhost:8000 router.php
   categories.
 - **Notifications** — assignment, critical issue, due date, expiring exception
   and SOP review alerts, deduped per day, with unread/all filters.
-- **Audit trail and system log** — every action recorded and exportable as CSV;
-  the administrator-only log page shows handled and uncaught failures.
+- **Audit trail and system log** — every action recorded and exportable as CSV,
+  each entry hash-chained to the one before it so a direct database edit is
+  detectable; the administrator-only log page shows handled and uncaught failures.
 - **Users and authority** — four roles, a rendered permission matrix, lockout
   after five failures, throttling per address, password reset by an admin.
 
@@ -186,6 +187,21 @@ shows the role matrix and manages accounts.
 
 `SCHEMA_VERSION` in `lib/db.php` bumps once per schema change; `migrate()` only
 adds missing tables, columns and indexes, so an existing database keeps its data.
+
+This build (`20261122`) adds `prev_hash` and `row_hash` to `audit_log` and seals
+the entries that already exist, once, in id order. It is additive and reversible:
+back up first, because re-sealing recomputes the chain.
+
+```bash
+mysqldump -u root -p security_crm > backup-before-audit-chain.sql   # keep this
+```
+
+To go back to the previous build, restore that dump (or, if you only want the
+columns gone, revert the code first and then):
+
+```sql
+ALTER TABLE audit_log DROP COLUMN row_hash, DROP COLUMN prev_hash;
+```
 
 This build **removes the CCTV module**. `lib/cctv.php`, `views/cctv.php` and the
 `uploads/cctv/` folder are gone, and no new `cameras` table is created. An older
@@ -324,6 +340,7 @@ schema.sql           optional manual import
 .htaccess            Apache hardening: deny uploads/lib/tests, deflate, caching
 router.php           same denies for the PHP built-in server (php -S … router.php)
 tests/run.php        dependency-free unit checks (php tests/run.php)
+tests/verify-audit.php  re-reads the trail and checks its hash chain
 logs/app.log         error log written by the exception handler
 uploads/             evidence files (random names, direct access denied)
 ```
@@ -375,6 +392,32 @@ and auditor/viewer; an analyst generates history but does not read it. Filter by
 actor, free text and date range; **Export CSV** writes the current filter as an audit pack; the
 dashboard shows the six most recent entries. Retention follows your database backup policy — the app
 never prunes the table, so archive it yourself if it grows large.
+
+### Tamper evidence
+
+Append-only by convention is not the same as append-only in fact: anyone with a MySQL console can
+`UPDATE` or `DELETE` a row. Every entry therefore carries two extra columns — `prev_hash`, the hash
+of the entry written before it, and `row_hash`, a SHA-256 over its own stored fields (id, timestamp,
+actor, role, action, record, label, detail, address, client) plus that link. The writer reads the
+current tail under a row lock, so two simultaneous events cannot both link to the same predecessor.
+
+```bash
+php tests/verify-audit.php
+# audit trail: 123 entries, chain intact (ids 1–123)          exit 0
+# audit trail: FIRST BROKEN LINK at entry #60 — the entry no
+#   longer matches the hash recorded for it                   exit 1
+```
+
+It walks `audit_log` in id order, recomputes each hash and follows each link, stopping at the first
+entry that does not match: a changed field reads as *no longer matches the hash*, a deleted row as
+*no longer links to the entry before it*, and a row inserted behind the application's back as
+*carries no hash*. Exit code 0 means intact, 1 means broken or unreadable, so it can run from cron or
+a pre-audit checklist. Nothing on screen changed — the trail still reads the same columns.
+
+What it cannot see: deleting the newest entries (nothing follows them), or the very first entry
+(which links to an empty string). Keep the last hash somewhere outside the database, or keep a
+database dump, if those cases matter to you. Re-sealing is deliberately not offered: an existing
+hash is never rewritten, so a tampered chain stays tampered.
 
 ## Known limitations
 
@@ -432,5 +475,7 @@ gzip on;
 ### Tests
 
 ```bash
-php tests/run.php     # 69 unit checks: tags, risk, clamping, dates, parsing, audit, notifications, router ↔ permission wiring
+php tests/run.php            # 84 unit checks: tags, risk, clamping, dates, parsing,
+                             # audit + hash chain, notifications, router ↔ permission wiring
+php tests/verify-audit.php   # live check: walks audit_log and names the first broken link
 ```

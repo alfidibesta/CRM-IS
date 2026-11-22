@@ -117,6 +117,66 @@ ck('audit without pdo is silent', (static function (): bool {
     return true;
 })(), true);
 
+/* -------------------------------------------------------- audit chain */
+
+// Rows shaped like the ones pdo_mysql returns (every column a string), so the
+// verifier is exercised against the same bytes the database hands it.
+$mkAudit = static function (int $id, string $detail, ?string $entityId = '5'): array {
+    return [
+        'id' => (string) $id, 'created_at' => '2026-01-02 03:04:05',
+        'actor_id' => '1', 'actor' => 'R. Hartono', 'role' => 'admin',
+        'action' => 'issue.update', 'entity' => 'issue', 'entity_id' => $entityId,
+        'label' => 'SEC-1004', 'detail' => $detail, 'ip' => '10.20.4.20',
+        'agent' => 'Mozilla/5.0', 'prev_hash' => '', 'row_hash' => '',
+    ];
+};
+
+$chainRows = static function (array $rows) use ($mkAudit): array {
+    $prev = '';
+    $out  = [];
+    foreach ($rows as $id => $detail) {
+        $row = $mkAudit((int) $id, $detail);
+        $row['prev_hash'] = $prev;
+        $row['row_hash']  = audit_row_hash($row, $prev);
+        $prev = $row['row_hash'];
+        $out[] = $row;
+    }
+    return $out;
+};
+
+$h = audit_row_hash($mkAudit(1, 'a'), '');
+ck('chain hash is sha-256 hex', strlen($h) . ':' . (ctype_xdigit($h) ? 'hex' : 'no'), '64:hex');
+ck('chain hash is deterministic', audit_row_hash($mkAudit(1, 'a'), ''), $h);
+ck('chain hash binds the predecessor', audit_row_hash($mkAudit(1, 'a'), 'x') !== $h, true);
+ck('chain hash binds the detail', audit_row_hash($mkAudit(1, 'b'), '') !== $h, true);
+ck('chain hash binds the timestamp', audit_row_hash(['created_at' => '2026-01-02 03:04:06'] + $mkAudit(1, 'a'), '') !== $h, true);
+ck('chain hash keeps null and empty apart', audit_row_hash($mkAudit(1, 'a', null), '') !== audit_row_hash($mkAudit(1, 'a', ''), ''), true);
+ck('chain hash cannot be spliced', audit_hash_payload(['label' => "a\x1fb", 'detail' => ''], '') === audit_hash_payload(['label' => 'a', 'detail' => 'b'], ''), false);
+
+$chain = $chainRows([1 => 'a', 2 => 'b', 3 => 'c']);
+$whole = audit_chain_check($chain);
+ck('chain intact', $whole['ok'], true);
+ck('chain walked every row', $whole['checked'], 3);
+ck('chain tail is the last hash', $whole['tail'], $chain[2]['row_hash']);
+
+$tampered = $chain;
+$tampered[1]['detail'] = 'edited in MySQL';
+ck('chain detects a changed row', audit_chain_check($tampered)['broken'], ['id' => 2, 'reason' => 'content']);
+
+$gapped = $chain;
+unset($gapped[1]);
+ck('chain detects a deleted row', audit_chain_check(array_values($gapped))['broken'], ['id' => 3, 'reason' => 'link']);
+
+$backdoor = $chain;
+$backdoor[1]['row_hash'] = '';
+ck('chain detects an unsealed row', audit_chain_check($backdoor)['broken'], ['id' => 2, 'reason' => 'missing']);
+
+ck('empty chain is intact', audit_chain_check([])['ok'], true);
+
+$first  = audit_chain_check(array_slice($chain, 0, 2));
+$second = audit_chain_check(array_slice($chain, 2), $first['tail']);
+ck('chain check continues across chunks', [$first['ok'], $second['ok'], $second['head']], [true, true, 3]);
+
 /* --------------------------------------------------------- notifications */
 ck('kind label', notification_label('issue_assigned'), 'Assigned to you');
 ck('kind tone', notification_tone('issue_critical'), 'red');
