@@ -1094,7 +1094,7 @@ $titles = [
     'issue'     => ['Issue Detail Report', 'Full investigation record, evidence and sign-off'],
     'templates' => ['Form Templates', 'NDA, agreements and controlled forms — download as Word'],
     'template'  => ['Template Detail', 'Preview, fill in and download as .docx'],    'exceptions' => ['EDLP Exceptions', 'Approved deviations for USB, websites, cameras and more'],
-    'logs'      => ['System Log', 'Errors and handled failures written by the application'],
+    'logs'      => ['System Log', 'Uncaught errors written by the application'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
     'audit'     => ['Audit Trail', 'Every recorded change, who made it and from where'],
     'notifications' => ['Notifications', 'Alerts for your issues, exceptions and document reviews'],

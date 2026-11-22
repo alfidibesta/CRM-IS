@@ -17,6 +17,7 @@ require __DIR__ . '/../lib/report.php';
 require __DIR__ . '/../lib/uploads.php';
 require __DIR__ . '/../lib/audit.php';
 require __DIR__ . '/../lib/notify.php';
+require __DIR__ . '/../lib/auth.php';
 
 $pass = 0;
 $fail = 0;
@@ -133,6 +134,63 @@ ck('notify without pdo is silent', (static function (): bool {
     notify(1, 'issue_due', 'x');
     return true;
 })(), true);
+
+/* ------------------------------------------- router ↔ permission wiring */
+
+// The router and its guard tables live in index.php/auth.php, so read them as
+// source: every POST case must map to a permission and every routed page must
+// have a page permission, or the action silently falls back/401s.
+$routerSrc = (string) file_get_contents(__DIR__ . '/../index.php');
+$authSrc   = (string) file_get_contents(__DIR__ . '/../lib/auth.php');
+$catalogue = array_keys(permission_list());
+
+preg_match_all("/case '([a-z_]+)':/", $routerSrc, $m);
+$cases = array_values(array_unique($m[1]));
+
+preg_match('/function action_permission.*?static \$map = \[(.*?)\];/s', $routerSrc, $m);
+preg_match_all("/'([a-z_]+)'\s*=>\s*'([a-z_.]+)'/", $m[1], $mm, PREG_SET_ORDER);
+$actMap = [];
+foreach ($mm as $row) {
+    $actMap[$row[1]] = $row[2];
+}
+
+ck('every POST action has a permission', array_values(array_diff($cases, array_keys($actMap))), []);
+ck('no action permission without a POST case', array_values(array_diff(array_keys($actMap), $cases)), []);
+ck('action permissions exist in the catalogue', array_values(array_diff(array_unique(array_values($actMap)), $catalogue)), []);
+
+preg_match('/\$pages = \[(.*?)\];/s', $routerSrc, $m);
+preg_match_all("/'([a-z_]+)'/", $m[1], $mm);
+$pages = $mm[1];
+
+preg_match('/function page_permission.*?static \$map = \[(.*?)\];/s', $authSrc, $m);
+preg_match_all("/'([a-z_]+)'\s*=>\s*'([a-z_.]+)'/", $m[1], $mm, PREG_SET_ORDER);
+$pageMap = [];
+foreach ($mm as $row) {
+    $pageMap[$row[1]] = $row[2];
+}
+
+// login is guarded before the page map; download checks file.download itself.
+$guardless = array_values(array_diff($pages, array_keys($pageMap)));
+sort($guardless);
+ck('routed pages without a page permission', $guardless, ['download', 'login']);
+ck('page permissions for unrouted pages', array_values(array_diff(array_keys($pageMap), $pages)), []);
+ck('page permissions exist in the catalogue', array_values(array_diff(array_unique(array_values($pageMap)), $catalogue)), []);
+
+// Guard the parsers themselves: an empty extraction would make the checks
+// above pass without testing anything.
+ck('wiring check sees the POST actions', count($cases) > 10, true);
+ck('wiring check sees the routed pages', count($pages) > 8, true);
+ck('wiring check sees the permission catalogue', count($catalogue) > 10, true);
+
+$badGrants = [];
+foreach (role_list() as $role => $def) {
+    foreach ($def['perms'] as $perm) {
+        if ($perm !== '*' && !in_array($perm, $catalogue, true)) {
+            $badGrants[] = $role . ':' . $perm;
+        }
+    }
+}
+ck('role grants exist in the catalogue', $badGrants, []);
 
 echo $fail === 0
     ? "OK — {$pass} checks passed\n"

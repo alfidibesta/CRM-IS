@@ -32,7 +32,7 @@ foreach ($lines as $line) {
 audit('logs.view', 'session', null, 'System log', count($lines) . ' line(s) reviewed' . ($q !== '' ? ' · filter “' . mb_substr($q, 0, 60) . '”' : ''));
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats grid--stats--trio">
   <article class="card stat stat--red">
     <p class="stat__label">PHP errors</p>
     <p class="stat__value"><?= $errors ?></p>
@@ -50,14 +50,16 @@ audit('logs.view', 'session', null, 'System log', count($lines) . ' line(s) revi
   </article>
 </section>
 
-<form class="filters filters--tight" method="get" action="index.php">
-  <input type="hidden" name="page" value="logs">
-  <input type="search" name="q" value="<?= e($q) ?>" placeholder="Filter the tail — error, exception, SQL…">
-  <button type="submit" class="btn btn--ghost btn--sm">Filter</button>
-  <?php if ($q !== ''): ?>
-    <a class="btn btn--ghost btn--sm" href="?page=logs">Clear</a>
-  <?php endif; ?>
-</form>
+<div class="toolbar">
+  <form class="search" method="get" action="index.php">
+    <input type="hidden" name="page" value="logs">
+    <input type="search" name="q" value="<?= e($q) ?>" placeholder="Filter the tail — error, SQL…">
+    <button type="submit" class="btn btn--ghost">Filter</button>
+    <?php if ($q !== ''): ?>
+      <a class="btn btn--ghost" href="?page=logs">Clear</a>
+    <?php endif; ?>
+  </form>
+</div>
 
 <details class="panel" data-collapse="logs-tail" open>
   <summary class="card__head">

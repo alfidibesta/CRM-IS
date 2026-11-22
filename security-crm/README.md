@@ -432,5 +432,5 @@ gzip on;
 ### Tests
 
 ```bash
-php tests/run.php     # 59 unit checks: tags, risk, clamping, dates, parsing, audit, notifications
+php tests/run.php     # 69 unit checks: tags, risk, clamping, dates, parsing, audit, notifications, router ↔ permission wiring
 ```
