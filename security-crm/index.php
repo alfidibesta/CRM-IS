@@ -276,6 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($severity === 'Critical') {
                 notify_issue_critical($code, $title, $id);
             }
+            known_tags_forget();
             flash("Issue {$code} created.");
             back_to('issue', $id);
 
@@ -356,6 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($status !== $old['status']) {
                 audit('issue.status', 'issue', $id, (string) $old['code'], "Status {$old['status']} to {$status}");
             }
+            known_tags_forget();
             flash('Issue updated.');
             back_to('issue', $id);
 

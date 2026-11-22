@@ -448,20 +448,26 @@ function audit_search(PDO $pdo, array $f, int $page = 1, int $per = 40): array
     return ['rows' => $st->fetchAll(), 'total' => $total, 'page' => $page, 'pages' => $pages, 'per' => $per];
 }
 
-/** Counters for the trail header. */
+/** Counters for the trail header — one aggregate pass over the table. */
 function audit_stats(PDO $pdo): array
 {
-    $one = static fn(string $sql): int => (int) $pdo->query($sql)->fetchColumn();
+    $row = $pdo->query("SELECT
+            COUNT(*)                                                              AS total,
+            COALESCE(SUM(created_at >= CURDATE()), 0)                             AS today,
+            COALESCE(SUM(created_at >= (NOW() - INTERVAL 7 DAY)), 0)              AS week,
+            COALESCE(SUM(action IN ('auth.failed','auth.locked','auth.blocked')
+                     AND created_at >= (NOW() - INTERVAL 1 DAY)), 0)              AS failed,
+            COALESCE(SUM(action = 'access.denied'
+                     AND created_at >= (NOW() - INTERVAL 7 DAY)), 0)              AS denied,
+            COUNT(DISTINCT NULLIF(actor, ''))                                     AS actors
+        FROM audit_log")->fetch();
 
     return [
-        'total'  => $one('SELECT COUNT(*) FROM audit_log'),
-        'today'  => $one('SELECT COUNT(*) FROM audit_log WHERE created_at >= CURDATE()'),
-        'week'   => $one('SELECT COUNT(*) FROM audit_log WHERE created_at >= (NOW() - INTERVAL 7 DAY)'),
-        'failed' => $one("SELECT COUNT(*) FROM audit_log
-                          WHERE action IN ('auth.failed','auth.locked','auth.blocked')
-                            AND created_at >= (NOW() - INTERVAL 1 DAY)"),
-        'denied' => $one("SELECT COUNT(*) FROM audit_log
-                          WHERE action = 'access.denied' AND created_at >= (NOW() - INTERVAL 7 DAY)"),
-        'actors' => $one("SELECT COUNT(DISTINCT actor) FROM audit_log WHERE actor <> ''"),
+        'total'  => (int) ($row['total'] ?? 0),
+        'today'  => (int) ($row['today'] ?? 0),
+        'week'   => (int) ($row['week'] ?? 0),
+        'failed' => (int) ($row['failed'] ?? 0),
+        'denied' => (int) ($row['denied'] ?? 0),
+        'actors' => (int) ($row['actors'] ?? 0),
     ];
 }

@@ -173,26 +173,80 @@ function tag_normalise(string $raw): string
     return implode(', ', array_values($seen));
 }
 
+/* ------------------------------------------------------ short-lived caches */
+
+/**
+ * Per-session cache for page furniture that every request reads but that no
+ * one needs to the second: the bell counts and the sidebar tag list.
+ *
+ * $key is a plain name; forget() also clears every "name/..." sibling, so one
+ * call can drop all variants of an entry. Without an active session (CLI,
+ * tests) the producer simply runs every time.
+ *
+ * @return mixed The producer's value
+ */
+function nav_cache(string $key, callable $producer, int $ttl = 15)
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return $producer();
+    }
+
+    $slot = $_SESSION['nav_cache'][$key] ?? null;
+    if (is_array($slot) && (int) ($slot['at'] ?? 0) > time() - max(1, $ttl)) {
+        return $slot['v'];
+    }
+
+    $value = $producer();
+    $_SESSION['nav_cache'][$key] = ['at' => time(), 'v' => $value];
+
+    return $value;
+}
+
+/** Drop a cached entry (and any "$key/..." variants) after a write. */
+function nav_cache_forget(string $key): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+    unset($_SESSION['nav_cache'][$key]);
+    foreach (array_keys($_SESSION['nav_cache']) as $slot) {
+        if (strpos((string) $slot, $key . '/') === 0) {
+            unset($_SESSION['nav_cache'][$slot]);
+        }
+    }
+}
+
 /** Every tag in use, for the picker and the register filter. */
 function known_tags(PDO $pdo): array
 {
     // Read once per request: the page header, the register filter and the issue
-    // form all ask for it, and every write path redirects before rendering.
+    // form all ask for it; a short session cache then spares the table scan on
+    // the next few page loads. Writes call known_tags_forget().
     static $cache = [];
     $key = spl_object_id($pdo);
     if (isset($cache[$key])) {
         return $cache[$key];
     }
 
-    $out = [];
-    foreach ($pdo->query("SELECT tags FROM issues WHERE tags <> ''")->fetchAll(PDO::FETCH_COLUMN) as $raw) {
-        foreach (tag_split((string) $raw) as $t) {
-            $out[mb_strtolower($t)] = $t;
+    $tags = nav_cache('tags', static function () use ($pdo): array {
+        $out = [];
+        foreach ($pdo->query("SELECT tags FROM issues WHERE tags <> ''")->fetchAll(PDO::FETCH_COLUMN) as $raw) {
+            foreach (tag_split((string) $raw) as $t) {
+                $out[mb_strtolower($t)] = $t;
+            }
         }
-    }
-    ksort($out);
+        ksort($out);
 
-    return $cache[$key] = array_values($out);
+        return array_values($out);
+    }, 30);
+
+    return $cache[$key] = $tags;
+}
+
+/** Drop the cached tag list after an issue write that can change it. */
+function known_tags_forget(): void
+{
+    nav_cache_forget('tags');
 }
 
 /** Tag chips linking to the filtered register. */

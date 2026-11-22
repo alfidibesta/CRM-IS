@@ -121,6 +121,9 @@ function notify(int $userId, string $kind, string $title, string $body = '', str
                 notification_tone($kind),
                 $key,
             ]);
+        if ($userId === (int) (current_user()['id'] ?? 0)) {
+            notify_forget_summary();
+        }
     } catch (Throwable $e) {
         error_log('notification failed: ' . $e->getMessage());
     }
@@ -178,15 +181,28 @@ function notify_summary(PDO $pdo, int $limit = 8): array
         return ['unread' => 0, 'items' => []];
     }
 
-    $c = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL');
-    $c->execute([$uid]);
+    $limit = max(1, min(20, $limit));
 
-    $st = $pdo->prepare('SELECT * FROM notifications WHERE user_id = ?
-                         ORDER BY read_at IS NULL DESC, created_at DESC, id DESC
-                         LIMIT ' . max(1, min(20, $limit)));
-    $st->execute([$uid]);
+    // The bell renders on every page; ten seconds of staleness is invisible
+    // and saves two queries per navigation. Reading a notification, or being
+    // sent one, forgets the entry right away.
+    return nav_cache('bell/' . $limit, static function () use ($pdo, $uid, $limit): array {
+        $c = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL');
+        $c->execute([$uid]);
 
-    return ['unread' => (int) $c->fetchColumn(), 'items' => $st->fetchAll()];
+        $st = $pdo->prepare('SELECT * FROM notifications WHERE user_id = ?
+                             ORDER BY read_at IS NULL DESC, created_at DESC, id DESC
+                             LIMIT ' . $limit);
+        $st->execute([$uid]);
+
+        return ['unread' => (int) $c->fetchColumn(), 'items' => $st->fetchAll()];
+    }, 10);
+}
+
+/** Drop the cached bell after this user's notifications change. */
+function notify_forget_summary(): void
+{
+    nav_cache_forget('bell');
 }
 
 /** Normalise the list filters. */
@@ -239,6 +255,10 @@ function notify_mark_all(PDO $pdo, int $uid): int
     $st = $pdo->prepare('UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL');
     $st->execute([$uid]);
 
+    if ($st->rowCount() > 0) {
+        notify_forget_summary();
+    }
+
     return $st->rowCount();
 }
 
@@ -247,8 +267,12 @@ function notify_mark_one(PDO $pdo, int $uid, int $id): void
     if ($uid <= 0 || $id <= 0) {
         return;
     }
-    $pdo->prepare('UPDATE notifications SET read_at = NOW() WHERE id = ? AND user_id = ? AND read_at IS NULL')
-        ->execute([$id, $uid]);
+    $st = $pdo->prepare('UPDATE notifications SET read_at = NOW() WHERE id = ? AND user_id = ? AND read_at IS NULL');
+    $st->execute([$id, $uid]);
+
+    if ($st->rowCount() > 0) {
+        notify_forget_summary();
+    }
 }
 
 /**
