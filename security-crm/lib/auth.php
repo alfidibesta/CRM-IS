@@ -180,7 +180,7 @@ function is_logged_in(): bool
 function attempt_login(PDO $pdo, string $username, string $password): array
 {
     $username = trim($username);
-    $ip       = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    $ip       = client_ip();          // proxy-aware on the intranet
     $log      = $pdo->prepare('INSERT INTO login_attempts (username, ip, ok) VALUES (?,?,?)');
 
     // Address-level throttle: 25 failures in 15 minutes block the address.

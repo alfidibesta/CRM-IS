@@ -90,6 +90,7 @@ or set environment variables, which take precedence:
 | `SECOPS_DB_PASS` | *(empty)* | database password |
 | `SECOPS_DB_NAME` | `security_crm` | database name (created if missing) |
 | `SECOPS_DEMO` | `1` | `0` hides the demo accounts on the sign-in screen |
+| `SECOPS_TRUSTED_PROXIES` | `127.0.0.1/32,::1/128` | proxies whose `X-Forwarded-For` may be believed (see [Intranet deployment](#intranet-deployment)) |
 
 On Apache, `SetEnv SECOPS_DB_USER secops` inside the vhost (or the folder's
 `.htaccess`) works; with the built-in server, prefix the command.
@@ -119,6 +120,55 @@ php -S localhost:8000 router.php
 
 `router.php` applies the same denies as `.htaccess`, so `schema.sql`,
 `README.md`, `lib/`, `tests/`, `logs/` and `uploads/` stay private.
+
+## Intranet deployment
+
+The app is built for a company network: it loads no CDN, web font, analytics or
+any other external resource, so an isolated LAN renders it exactly like a
+connected one. Serve it from its LAN address (for example
+`http://10.120.10.20/security-crm/`) — ideally over HTTPS, because the service
+worker that powers offline mode only registers on HTTPS or `localhost`.
+
+### The real client address
+
+`REMOTE_ADDR` is the address that reached PHP. Behind a reverse proxy, load
+balancer or intranet portal that is the proxy, and the user's own address (for
+example `10.120.10.10`) arrives in `X-Forwarded-For`. The audit trail and the
+`login_attempts` table record the **client** address:
+
+- A forwarding header is believed only when the request's direct peer is listed
+  in `SECOPS_TRUSTED_PROXIES` (comma-separated addresses or CIDRs). The default
+  trusts this machine only: `127.0.0.1/32,::1/128`.
+- `X-Forwarded-For` is read right to left, skipping each trusted proxy, so an
+  entry a client appended itself is never the one recorded.
+- `X-Real-IP` is used when a proxy sends that instead of the list.
+
+```apache
+# Proxy on the same host (Laragon + nginx/IIS in front, for example)
+SetEnv SECOPS_TRUSTED_PROXIES "127.0.0.1/32,::1/128"
+# Proxy on the LAN, or a whole proxy subnet
+SetEnv SECOPS_TRUSTED_PROXIES "10.120.10.5,10.0.0.0/8"
+```
+
+```nginx
+proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Real-IP         $remote_addr;
+```
+
+`X-Forwarded-Proto: https` is honoured only from a trusted proxy as well, so the
+session cookie is `Secure` and HSTS is sent when TLS ends at the proxy. Record
+the proxy addresses in `SECOPS_TRUSTED_PROXIES` — otherwise the audit trail
+records the proxy instead of the user.
+
+### Embedding in an intranet portal
+
+Framing is denied by default. To show the CRM inside a portal page, name the
+portal's origin and restart the web server:
+
+```apache
+SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
+```
 
 ## Sign in
 
@@ -496,10 +546,15 @@ location ~* ^/secops-crm/.*\.(sql|md)$ { deny all; }
 gzip on;
 ```
 
+5. Behind a reverse proxy, set `SECOPS_TRUSTED_PROXIES` to its address so the
+   audit trail and sign-in throttling see the user's LAN address, not the
+   proxy's (see [Intranet deployment](#intranet-deployment)). Only list
+   addresses that really are proxies: headers from anyone else are ignored.
+
 ### Tests
 
 ```bash
-php tests/run.php            # 84 unit checks: tags, risk, clamping, dates, parsing,
-                             # audit + hash chain, notifications, router ↔ permission wiring
+php tests/run.php            # 100 unit checks: tags, risk, clamping, dates, parsing,
+                             # client IP, audit + hash chain, notifications, router ↔ permission wiring
 php tests/verify-audit.php   # live check: walks audit_log and names the first broken link
 ```

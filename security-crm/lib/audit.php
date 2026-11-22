@@ -158,7 +158,7 @@ function audit(
             'entity_id' => $entityId !== null && $entityId > 0 ? $entityId : null,
             'label'     => mb_substr($label, 0, 200),
             'detail'    => mb_substr($detail, 0, 500),
-            'ip'        => mb_substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+            'ip'        => mb_substr(client_ip(), 0, 45),
             'agent'     => mb_substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 120),
         ];
 

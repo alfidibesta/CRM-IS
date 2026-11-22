@@ -270,3 +270,161 @@ function exception_period(array $e): string
 {
     return fmt_date($e['period_start'] ?? null) . ' → ' . fmt_date($e['period_end'] ?? null);
 }
+
+/* ------------------------------------------------------------- client IP */
+
+/**
+ * Addressing for an intranet deployment.
+ *
+ * On a LAN the app may sit behind a reverse proxy (nginx, IIS ARR, an intranet
+ * portal). PHP then sees the proxy's address in REMOTE_ADDR and the real client
+ * — for example 10.120.10.10 — only in X-Forwarded-For. Those headers are
+ * client-controlled, though, so they are read only when the direct peer is a
+ * configured trusted proxy; otherwise a user could write any address they like
+ * into the audit trail.
+ *
+ * Trusted proxies come from SECOPS_TRUSTED_PROXIES (comma-separated addresses
+ * or CIDRs) or config.php. The default trusts loopback only: a proxy on another
+ * host must be listed explicitly.
+ */
+
+function secops_trusted_proxies(): array
+{
+    $fromConfig = $GLOBALS['secops_config']['trusted_proxies'] ?? null;
+    if (is_array($fromConfig)) {
+        $raw = $fromConfig;
+    } else {
+        $env = getenv('SECOPS_TRUSTED_PROXIES');
+        $raw = explode(',', $env === false || $env === '' ? '127.0.0.1/32,::1/128' : $env);
+    }
+
+    $out = [];
+    foreach ($raw as $entry) {
+        $entry = trim((string) $entry);
+        if ($entry !== '') {
+            $out[] = $entry;
+        }
+    }
+    return $out;
+}
+
+/** Strip brackets, a zone id and an IPv4 port so an address can be compared. */
+function normalize_ip(string $ip): string
+{
+    $ip = trim($ip);
+    if (str_starts_with($ip, '[') && str_ends_with($ip, ']')) {
+        $ip = substr($ip, 1, -1);
+    }
+    $ip = preg_replace('/%[0-9a-z._-]+$/i', '', $ip) ?? $ip;
+    // Some proxies report IPv4 clients in mapped form (::ffff:10.120.10.10).
+    if (stripos($ip, '::ffff:') === 0
+        && filter_var(substr($ip, 7), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+        $ip = substr($ip, 7);
+    }
+    if (preg_match('/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/', $ip, $m) === 1) {
+        $ip = $m[1];
+    }
+    return $ip;
+}
+
+/** Is $ip inside $cidr (a single address is treated as /32 or /128)? */
+function ip_matches_cidr(string $ip, string $cidr): bool
+{
+    $cidr = trim($cidr);
+    if ($cidr === '') {
+        return false;
+    }
+    if (strpos($cidr, '/') === false) {
+        $cidr .= strpos($cidr, ':') === false ? '/32' : '/128';
+    }
+    [$network, $bitsRaw] = explode('/', $cidr, 2);
+    $bits = (int) $bitsRaw;
+
+    $ipBin  = @inet_pton(normalize_ip($ip));
+    $netBin = @inet_pton(normalize_ip($network));
+    if ($ipBin === false || $netBin === false || strlen($ipBin) !== strlen($netBin)) {
+        return false;
+    }
+
+    $max = strlen($ipBin) * 8;
+    if ($bits < 0 || $bits > $max) {
+        return false;
+    }
+
+    $whole = intdiv($bits, 8);
+    if ($whole > 0 && strncmp($ipBin, $netBin, $whole) !== 0) {
+        return false;
+    }
+    $rest = $bits % 8;
+    if ($rest === 0) {
+        return true;
+    }
+    $mask = (0xff << (8 - $rest)) & 0xff;
+    return (ord($ipBin[$whole]) & $mask) === (ord($netBin[$whole]) & $mask);
+}
+
+/** Is this address one of the proxies whose forwarding headers we accept? */
+function is_trusted_proxy(string $ip): bool
+{
+    $ip = normalize_ip($ip);
+    if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP) === false) {
+        return false;
+    }
+    foreach (secops_trusted_proxies() as $cidr) {
+        if (ip_matches_cidr($ip, $cidr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * The client address to record for this request.
+ *
+ * X-Forwarded-For is read right to left: each trusted proxy is skipped and the
+ * first address it did not write is the client. Falls back to REMOTE_ADDR.
+ */
+function client_ip(): string
+{
+    $peer = normalize_ip((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    if ($peer === '' || filter_var($peer, FILTER_VALIDATE_IP) === false) {
+        return '';
+    }
+    if (!is_trusted_proxy($peer)) {
+        return $peer;
+    }
+
+    $forwarded = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    if ($forwarded !== '') {
+        $hops = array_reverse(explode(',', $forwarded));
+        $candidate = '';
+        foreach ($hops as $hop) {
+            $hop = normalize_ip($hop);
+            if ($hop === '' || filter_var($hop, FILTER_VALIDATE_IP) === false) {
+                continue;               // junk in the list: ignore that hop
+            }
+            if (is_trusted_proxy($hop)) {
+                $candidate = $hop;      // keep the last trusted hop as a fallback
+                continue;
+            }
+            return $hop;                // first address the chain did not vouch for
+        }
+        if ($candidate !== '') {
+            return $candidate;
+        }
+    }
+
+    $real = normalize_ip((string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+    if ($real !== '' && filter_var($real, FILTER_VALIDATE_IP) !== false) {
+        return $real;
+    }
+
+    return $peer;
+}
+
+/** The direct peer address, before any forwarding header is considered. */
+function peer_ip(): string
+{
+    $peer = normalize_ip((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return filter_var($peer, FILTER_VALIDATE_IP) !== false ? $peer : '';
+}

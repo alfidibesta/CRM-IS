@@ -252,6 +252,43 @@ foreach (role_list() as $role => $def) {
 }
 ck('role grants exist in the catalogue', $badGrants, []);
 
+/* -------------------------------------------------------------- client IP */
+
+ck('cidr /8 matches', ip_matches_cidr('10.120.10.10', '10.0.0.0/8'), true);
+ck('cidr /8 rejects', ip_matches_cidr('192.168.1.5', '10.0.0.0/8'), false);
+ck('cidr bare address', ip_matches_cidr('10.120.10.10', '10.120.10.10'), true);
+ck('cidr /25 upper bound', ip_matches_cidr('10.0.0.127', '10.0.0.0/25'), true);
+ck('cidr /25 just outside', ip_matches_cidr('10.0.0.128', '10.0.0.0/25'), false);
+ck('cidr v6 loopback', ip_matches_cidr('::1', '::1/128'), true);
+ck('cidr mixed family', ip_matches_cidr('10.0.0.1', '::1/128'), false);
+ck('normalize strips port', normalize_ip('10.120.10.10:8080'), '10.120.10.10');
+ck('normalize unmaps v4-in-v6', normalize_ip('::ffff:10.120.10.10'), '10.120.10.10');
+ck('mapped address matches v4 cidr', ip_matches_cidr('::ffff:10.120.10.10', '10.0.0.0/8'), true);
+
+$savedServer = $_SERVER;
+$GLOBALS['secops_config'] = ['trusted_proxies' => ['127.0.0.1/32', '10.120.10.5']];
+
+$_SERVER = ['REMOTE_ADDR' => '10.120.10.10'];
+ck('client ip direct on the LAN', client_ip(), '10.120.10.10');
+
+$_SERVER = ['REMOTE_ADDR' => '10.120.10.10', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9'];
+ck('client ip ignores forwarding from an untrusted peer', client_ip(), '10.120.10.10');
+
+$_SERVER = ['REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9, 10.120.10.5'];
+ck('client ip behind a trusted proxy', client_ip(), '203.0.113.9');
+
+$_SERVER = ['REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => 'junk, 10.120.10.9'];
+ck('client ip skips junk hops', client_ip(), '10.120.10.9');
+
+$_SERVER = ['REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_REAL_IP' => '10.120.10.11'];
+ck('client ip from x-real-ip', client_ip(), '10.120.10.11');
+
+$_SERVER = ['REMOTE_ADDR' => '127.0.0.1'];
+ck('client ip falls back to the peer', client_ip(), '127.0.0.1');
+
+$_SERVER = $savedServer;
+unset($GLOBALS['secops_config']);
+
 echo $fail === 0
     ? "OK — {$pass} checks passed\n"
     : "FAILED — {$fail} of " . ($pass + $fail) . " checks\n";

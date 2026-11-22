@@ -49,11 +49,17 @@ require __DIR__ . '/lib/word.php';
 require __DIR__ . '/lib/report.php';
 
 $cfg = require __DIR__ . '/config.php';
+$GLOBALS['secops_config'] = $cfg;   // client_ip() reads trusted_proxies from here
 
 /* ----------------------------------------------- session + security headers */
 
-$https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
-    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+// A forwarding header is believed only from a configured proxy, so a plain
+// HTTP client cannot fake an HTTPS origin and pin the browser to HSTS.
+$https = !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+if (!$https && is_trusted_proxy(peer_ip())) {
+    $proto = strtolower(trim((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')));
+    $https = $proto === 'https';
+}
 
 // Start the session before any output so CSRF tokens and flash messages work.
 if (session_status() !== PHP_SESSION_ACTIVE) {
