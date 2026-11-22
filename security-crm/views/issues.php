@@ -19,15 +19,30 @@ if ($q !== '') { $where[] = '(title LIKE ? OR code LIKE ? OR owner LIKE ? OR loc
 if ($tag !== '') { $where[] = 'tags LIKE ?'; $args[] = '%' . $tag . '%'; }
 $join = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
-$sql = 'SELECT * FROM issues' . $join
-     . " ORDER BY FIELD(severity,'Critical','High','Medium','Low'), reported_at DESC, id DESC";
+// One page of the register at a time: at a few thousand issues the old
+// unbounded SELECT * pulled every row into memory on each filter click.
+$per    = 50;
+$pageNo = max(1, (int) ($_GET['p'] ?? 1));
+
+$countSt = $pdo->prepare('SELECT COUNT(*) FROM issues' . $join);
+$countSt->execute($args);
+$total = (int) $countSt->fetchColumn();
+$pages = max(1, (int) ceil($total / $per));
+$pageNo = min($pageNo, $pages);
+$offset = ($pageNo - 1) * $per;
+
+$sql = 'SELECT id, code, title, category, severity, status, owner, location, department,
+               due_at, reported_at, risk_score, likelihood, impact, tags
+          FROM issues' . $join
+     . " ORDER BY FIELD(severity,'Critical','High','Medium','Low'), reported_at DESC, id DESC"
+     . ' LIMIT ' . $per . ' OFFSET ' . $offset;
 $st = $pdo->prepare($sql);
 $st->execute($args);
 $rows = $st->fetchAll();
 
 function issue_url(array $over): string
 {
-    $base = ['page' => 'issues', 'cat' => $_GET['cat'] ?? '', 'sev' => $_GET['sev'] ?? '', 'st' => $_GET['st'] ?? '', 'q' => trim($_GET['q'] ?? ''), 'tag' => $_GET['tag'] ?? ''];
+    $base = ['page' => 'issues', 'cat' => $_GET['cat'] ?? '', 'sev' => $_GET['sev'] ?? '', 'st' => $_GET['st'] ?? '', 'q' => trim($_GET['q'] ?? ''), 'tag' => $_GET['tag'] ?? '', 'p' => (string) max(1, (int) ($_GET['p'] ?? 1))];
     return '?' . http_build_query(array_merge($base, $over));
 }
 
@@ -264,4 +279,19 @@ $canExport = can('issue.export');
   </table>
 </section>
 
-<p class="footnote"><?= count($rows) ?> issue<?= count($rows) === 1 ? '' : 's' ?> shown · click a title for the full report · changing the status select saves immediately</p>
+<?php if ($pages > 1): ?>
+<nav class="pager" aria-label="Issue register pages">
+  <span class="muted">
+    Page <?= $pageNo ?> of <?= $pages ?> · <?= number_format($total) ?> issue<?= $total === 1 ? '' : 's' ?>
+    · showing <?= $offset + 1 ?>–<?= $offset + count($rows) ?>
+  </span>
+  <?php if ($pageNo > 1): ?>
+    <a class="btn btn--ghost btn--xs" href="<?= e(issue_url(['p' => $pageNo - 1])) ?>">← Previous</a>
+  <?php endif; ?>
+  <?php if ($pageNo < $pages): ?>
+    <a class="btn btn--ghost btn--xs" href="<?= e(issue_url(['p' => $pageNo + 1])) ?>">Next →</a>
+  <?php endif; ?>
+</nav>
+<?php endif; ?>
+
+<p class="footnote"><?= count($rows) ?> of <?= number_format($total) ?> issue<?= $total === 1 ? '' : 's' ?> on this page · click a title for the full report · changing the status select saves immediately</p>

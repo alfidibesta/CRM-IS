@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261122;
+const SCHEMA_VERSION = 20261123;
 
 function db(array $cfg): PDO
 {
@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS sops (
     summary       VARCHAR(500) NOT NULL DEFAULT '',
     content       TEXT NULL,
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_sops_review (review_at)
+    INDEX idx_sops_review (review_at),
+    INDEX idx_sops_type_status (type, status)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -112,6 +113,8 @@ CREATE TABLE IF NOT EXISTS issues (
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_issues_status (status),
     INDEX idx_issues_category (category),
+    INDEX idx_issues_sev_status (severity, status),
+    INDEX idx_issues_cat_status (category, status),
     INDEX idx_issues_due (due_at),
     INDEX idx_issues_reported (reported_at),
     INDEX idx_issues_template (report_template_id)
@@ -174,6 +177,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     INDEX idx_audit_created (created_at),
     INDEX idx_audit_actor (actor),
     INDEX idx_audit_action (action),
+    INDEX idx_audit_action_created (action, created_at),
     INDEX idx_audit_entity (entity, entity_id)
 ) ENGINE=InnoDB;
 
@@ -316,10 +320,17 @@ SQL;
         'idx_issues_due'      => 'due_at',
         'idx_issues_reported' => 'reported_at',
         'idx_issues_template' => 'report_template_id',
+        // Register filters (category/severity + status) and the overdue counters.
+        'idx_issues_sev_status' => 'severity, status',
+        'idx_issues_cat_status' => 'category, status',
     ]);
-    ensure_indexes($pdo, 'sops', ['idx_sops_review' => 'review_at']);
+    ensure_indexes($pdo, 'sops', [
+        'idx_sops_review'      => 'review_at',
+        'idx_sops_type_status' => 'type, status',
+    ]);
     ensure_indexes($pdo, 'exceptions', ['idx_exc_category' => 'category']);
     ensure_indexes($pdo, 'tasks', ['idx_tasks_column' => 'column_key, position']);
+    ensure_indexes($pdo, 'audit_log', ['idx_audit_action_created' => 'action, created_at']);
 
     // Tamper-evident trail (20261122): two hash columns on audit_log. Existing
     // entries are sealed once, in id order, here; entries that already carry a

@@ -300,6 +300,30 @@ applied before the first paint so nothing flashes, and never change layout.
 categories, the log tail — are native `<details>` elements that remember
 whether you left them open.
 
+## Offline
+
+Nothing on any screen is fetched from the internet: every stylesheet, script, icon and font
+is served by the app itself (the font stack is the system UI font), so a plant network with
+no internet works exactly like the demo. No external API is called either — Word files are
+built by the bundled OOXML writer.
+
+`sw.js` is a service worker that precaches `assets/app.css`, `assets/app.js` and
+`offline.html`:
+
+| Request | Strategy |
+| --- | --- |
+| `assets/*` (CSS, JS, images) | cache-first, refreshed in the background |
+| Page navigations (`index.php?page=…`) | network-first, falls back to `offline.html` |
+| Anything else | network only — pages and downloads are rendered per session and are never cached |
+
+While the browser reports no connection, the app shows a red banner and **blocks form
+submissions** instead of queueing them: every POST carries a one-shot CSRF token, so a
+replayed submission would be refused anyway. Board drag-and-drop is blocked the same way.
+
+Service workers only run over HTTPS or on `localhost`. Opened as plain `http://` over the
+LAN the app behaves as before — no caching, no offline page. Bump `VERSION` in `sw.js`
+when `app.css` or `app.js` change so clients pick up the new files.
+
 ## Word export
 
 Both the issue report and the templates are built as **real `.docx` files** by

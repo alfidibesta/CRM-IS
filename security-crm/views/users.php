@@ -4,7 +4,10 @@
  * Requires the `page.users` permission (administrators only).
  */
 
-$users = $pdo->query('SELECT * FROM users ORDER BY FIELD(role,\'admin\',\'manager\',\'analyst\',\'viewer\'), username')->fetchAll();
+// Explicit list: the password hash never leaves the database for a list view.
+$users = $pdo->query('SELECT id, username, name, email, role, active, failed_attempts, locked_until, last_login
+                        FROM users
+                       ORDER BY FIELD(role,\'admin\',\'manager\',\'analyst\',\'viewer\'), username')->fetchAll();
 
 $roles = role_list();
 $perms = permission_list();

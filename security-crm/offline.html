@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline · SecOps CRM</title>
+<style>
+  :root {
+    --ink: #14161a; --ink-2: #4b5158; --ink-3: #6b7280;
+    --line: #e6e8ec; --bg: #f7f8fa; --card: #fff;
+    --blue: #2f6fed; --red: #e5484d; --orange: #f76808;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: var(--bg); color: var(--ink); padding: 24px;
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { width: min(520px, 100%); background: var(--card); border: 1px solid var(--line);
+         border-radius: 14px; padding: 26px; box-shadow: 0 1px 2px rgba(16,18,22,.04); }
+  .mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+          background: linear-gradient(135deg, var(--red), var(--orange)); color: #fff;
+          font-weight: 700; margin-bottom: 14px; }
+  h1 { font-size: 19px; margin: 0 0 6px; letter-spacing: -.02em; }
+  p { margin: 0 0 10px; color: var(--ink-2); }
+  ul { margin: 0 0 16px; padding-left: 18px; color: var(--ink-2); }
+  li { margin-bottom: 4px; }
+  a.btn { display: inline-block; background: var(--ink); color: #fff; text-decoration: none;
+          border-radius: 999px; padding: 8px 16px; font-weight: 600; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .note { font-size: 11.5px; color: var(--ink-3); margin: 14px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark" aria-hidden="true">S</div>
+  <h1>You are offline</h1>
+  <p>The SecOps CRM server could not be reached, so no page could be loaded. Records live in MySQL on the plant server — nothing on this screen is a cached copy of them.</p>
+  <ul>
+    <li>Check the network cable or Wi-Fi, then try again.</li>
+    <li>Make sure the server (Apache/XAMPP or Laragon) is running.</li>
+    <li>Nothing you submitted while offline was saved — forms are blocked, not queued.</li>
+  </ul>
+  <a class="btn" href="./">Try again</a>
+  <p class="note">Static pages that are already open, like this one, still work: <code>offline.html</code> is served from the local cache.</p>
+</main>
+</body>
+</html>

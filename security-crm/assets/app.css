@@ -19,6 +19,7 @@
   --line-2: #f1f2f5;
   --bg: #f7f8fa;
   --card: #ffffff;
+  --row-alt: #fcfcfd;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -303,6 +304,8 @@ ul, ol { padding: 0; list-style: none; }
 .table td { padding: 8px 10px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table tbody tr.row:hover { background: #fbfbfd; }
+.table--list tbody tr:nth-child(even) { background: var(--row-alt); }
+.table--list tbody tr.row:hover, .table--list tbody tr:nth-child(even):hover { background: #f7f8fb; }
 .table--tight { font-size: 12px; }
 .table--tight th { padding: 6px 8px; }
 .table--tight td { padding: 6px 8px; }
@@ -324,7 +327,7 @@ ul, ol { padding: 0; list-style: none; }
 .strong { font-weight: 600; }
 .muted { color: var(--ink-3); font-weight: 400; }
 .nowrap { white-space: nowrap; }
-.text-red { color: var(--red); font-weight: 600; }
+.text-red { color: var(--red-text); font-weight: 600; }
 .preline { white-space: pre-line; }
 .center { text-align: center; }
 .right { text-align: right; }
@@ -990,7 +993,33 @@ ul, ol { padding: 0; list-style: none; }
 
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
-.text-red { color: var(--red-text); }
+/* Disabled / in-flight buttons (the board and forms lock themselves on submit). */
+.btn:disabled, .btn[disabled], .btn[aria-disabled="true"] {
+  opacity: .55;
+  cursor: progress;
+  pointer-events: none;
+}
+.footnote.is-error { color: var(--red-text); font-weight: 600; }
+
+/* Offline banner, created by app.js only when the connection drops. */
+.netbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 7px 20px;
+  background: var(--red-soft);
+  color: var(--red-text);
+  border-bottom: 1px solid #f7d4d5;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+.netbar__retry { background: var(--card); font-weight: 600; }
+.netbar[hidden] { display: none; }
 
 @media (max-width: 1100px) {
   .reportform { grid-template-columns: minmax(0, 1fr); }
@@ -1086,6 +1115,7 @@ html[data-theme="dark"] {
   --line-2: #1a2029;
   --bg: #0d1116;
   --card: #141a21;
+  --row-alt: #11171e;
   --red-soft: #2a1518;
   --blue-soft: #12203a;
   --orange-soft: #2a1a0e;
@@ -1115,7 +1145,9 @@ html[data-theme="dark"] .noterow input {
 html[data-theme="dark"] .topbar { background: rgba(20, 26, 33, .88); }
 html[data-theme="dark"] .card--doc,
 html[data-theme="dark"] .card--reportform { background: #121821; }
-html[data-theme="dark"] .table tbody tr.row:hover { background: #19202a; }
+html[data-theme="dark"] .table tbody tr.row:hover,
+html[data-theme="dark"] .table--list tbody tr:nth-child(even):hover { background: #19202a; }
+html[data-theme="dark"] .netbar { border-bottom-color: #4a2225; }
 html[data-theme="dark"] .nav__item:hover { background: #1b222c; color: var(--ink); }
 html[data-theme="dark"] .nav__item.is-active { background: #e9eef6; color: #0d1116; }
 html[data-theme="dark"] .btn--primary { background: #e9eef6; border-color: #e9eef6; color: #0d1116; }
@@ -1144,4 +1176,3 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   max-height: 520px; overflow: auto;
 }
 .nav__dot--neutral { background: var(--ink-3); }
-.mono { font-family: var(--mono); }

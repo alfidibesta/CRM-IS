@@ -27,7 +27,9 @@ $statTpl    = (int) ($agg['templates'] ?? 0);
 $statUsers  = (int) ($agg['users'] ?? 0);
 $excActive  = (int) ($agg['exc_active'] ?? 0);
 $excSoon    = (int) ($agg['exc_soon'] ?? 0);
-$excList    = $pdo->query("SELECT * FROM exceptions WHERE status <> 'Revoked' ORDER BY period_end ASC LIMIT 5")->fetchAll();
+$excList    = $pdo->query("SELECT id, code, title, category, target, period_end, owner, status
+                              FROM exceptions WHERE status <> 'Revoked'
+                             ORDER BY period_end ASC LIMIT 5")->fetchAll();
 
 $byCategory = $pdo->query("SELECT category,
         SUM(status <> 'Resolved') AS open,
@@ -227,7 +229,8 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
 
 <?php
 $auditRecent = can('page.audit')
-    ? $pdo->query('SELECT * FROM audit_log ORDER BY id DESC LIMIT 6')->fetchAll()
+    ? $pdo->query('SELECT id, created_at, actor, role, action, entity, entity_id, label
+                     FROM audit_log ORDER BY id DESC LIMIT 6')->fetchAll()
     : [];
 ?>
 <?php if ($auditRecent): ?>
