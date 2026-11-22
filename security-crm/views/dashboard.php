@@ -180,20 +180,22 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
       <h3>Next document reviews</h3>
       <a class="link" href="?page=sop">Library</a>
     </header>
-    <table class="table table--tight">
-      <tbody>
-      <?php foreach ($upcoming as $u): ?>
-        <tr>
-          <td class="mono"><?= e($u['code']) ?></td>
-          <td><?= e($u['title']) ?><span class="muted"> · <?= e($u['owner']) ?></span></td>
-          <td class="nowrap"><?= fmt_date($u['review_at']) ?></td>
-        </tr>
-      <?php endforeach; ?>
-      <?php if (!$upcoming): ?>
-        <tr><td class="muted">Nothing scheduled.</td></tr>
-      <?php endif; ?>
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table table--tight">
+        <tbody>
+        <?php foreach ($upcoming as $u): ?>
+          <tr>
+            <td class="mono"><?= e($u['code']) ?></td>
+            <td><?= e($u['title']) ?><span class="muted"> · <?= e($u['owner']) ?></span></td>
+            <td class="nowrap"><?= fmt_date($u['review_at']) ?></td>
+          </tr>
+        <?php endforeach; ?>
+        <?php if (!$upcoming): ?>
+          <tr><td class="muted">Nothing scheduled.</td></tr>
+        <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
   </article>
 </section>
 
@@ -202,6 +204,7 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
     <h2>Recently reported</h2>
     <a class="link" href="?page=issues">View all issues</a>
   </header>
+  <div class="table-wrap">
   <table class="table">
     <thead>
       <tr><th>#</th><th>Issue</th><th>Category</th><th>Severity</th><th class="center">Risk</th><th>Status</th><th>Owner</th><th>Due</th><th></th></tr>
@@ -225,6 +228,7 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
     <?php endforeach; ?>
     </tbody>
   </table>
+  </div>
 </section>
 
 <?php
@@ -239,6 +243,7 @@ $auditRecent = can('page.audit')
     <h2>Audit trail</h2>
     <a class="link" href="?page=audit">Open trail</a>
   </header>
+  <div class="table-wrap">
   <table class="table table--tight">
     <thead>
       <tr><th>When</th><th>Actor</th><th>Event</th><th>Record</th></tr>
@@ -255,6 +260,7 @@ $auditRecent = can('page.audit')
     <?php endforeach; ?>
     </tbody>
   </table>
+  </div>
 </section>
 <?php endif; ?>
 
@@ -264,6 +270,7 @@ $auditRecent = can('page.audit')
     <h2>EDLP exceptions expiring</h2>
     <a class="link" href="?page=exceptions">Open register</a>
   </header>
+  <div class="table-wrap">
   <table class="table table--tight">
     <thead>
       <tr><th>Exception</th><th>Category</th><th>Period</th><th>State</th><th>Owner</th></tr>
@@ -295,6 +302,7 @@ $auditRecent = can('page.audit')
     <?php endforeach; ?>
     </tbody>
   </table>
+  </div>
 </section>
 <?php endif; ?>
 
