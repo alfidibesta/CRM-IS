@@ -262,81 +262,11 @@ function exc_url(array $over): string
         <td class="nowrap"><?= e($e['owner']) ?: '—' ?></td>
         <td class="right">
           <?php if ($canManage): ?>
-            <details class="detail detail--inline">
+            <?php $panel = '?page=exception_panel&what=exception&id=' . (int) $e['id']; ?>
+            <details class="detail detail--inline" data-lazy="<?= e($panel) ?>">
               <summary class="btn btn--ghost btn--xs">Edit</summary>
               <div class="detail__body detail__body--card detail__body--wide">
-                <form class="form form--sub" method="post" action="index.php">
-                  <?= csrf_field() ?>
-                  <input type="hidden" name="action" value="update_exception">
-                  <input type="hidden" name="back" value="exceptions">
-                  <input type="hidden" name="exception_id" value="<?= (int) $e['id'] ?>">
-                  <div class="form__grid">
-                    <label class="field field--wide"><span>Title</span>
-                      <input type="text" name="title" maxlength="200" value="<?= e($e['title']) ?>">
-                    </label>
-                    <label class="field"><span>Category</span>
-                      <select name="category">
-                        <?php foreach ($cats as $c): ?>
-                          <option value="<?= e($c['name']) ?>" <?= $e['category'] === $c['name'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </label>
-                    <label class="field"><span>Status</span>
-                      <select name="status">
-                        <?php foreach (['Active', 'Pending', 'Revoked'] as $s): ?>
-                          <option <?= $e['status'] === $s ? 'selected' : '' ?>><?= $s ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </label>
-                    <label class="field field--wide"><span>Target</span>
-                      <input type="text" name="target" maxlength="180" value="<?= e($e['target']) ?>">
-                    </label>
-                    <label class="field"><span>Period start</span>
-                      <input type="date" name="period_start" value="<?= e($e['period_start']) ?>">
-                    </label>
-                    <label class="field"><span>Period end</span>
-                      <input type="date" name="period_end" value="<?= e($e['period_end']) ?>">
-                    </label>
-                    <label class="field"><span>Risk level</span>
-                      <select name="risk_level">
-                        <?php foreach (['High', 'Medium', 'Low'] as $s): ?>
-                          <option <?= $e['risk_level'] === $s ? 'selected' : '' ?>><?= $s ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </label>
-                    <label class="field"><span>Reference no.</span>
-                      <input type="text" name="ref_no" maxlength="40" value="<?= e($e['ref_no']) ?>">
-                    </label>
-                    <label class="field"><span>Owner</span>
-                      <input type="text" name="owner" maxlength="100" value="<?= e($e['owner']) ?>">
-                    </label>
-                    <label class="field"><span>Approved by</span>
-                      <input type="text" name="approved_by" maxlength="100" value="<?= e($e['approved_by']) ?>">
-                    </label>
-                    <label class="field field--wide"><span>Detail</span>
-                      <textarea name="detail" rows="3"><?= e($e['detail']) ?></textarea>
-                    </label>
-                    <label class="field field--wide"><span>Business justification</span>
-                      <textarea name="justification" rows="2"><?= e($e['justification']) ?></textarea>
-                    </label>
-                    <label class="field field--wide"><span>Compensating control</span>
-                      <input type="text" name="control" maxlength="255" value="<?= e($e['control']) ?>">
-                    </label>
-                  </div>
-                  <div class="form__actions">
-                    <button type="submit" class="btn btn--primary btn--sm">Save</button>
-                    <span class="muted"><?= e($e['code']) ?> · updated <?= fmt_date($e['updated_at']) ?></span>
-                  </div>
-                </form>
-
-                <form class="inline-form inline-form--danger" method="post" action="index.php"
-                      data-confirm="Delete <?= e($e['code']) ?> permanently?">
-                  <?= csrf_field() ?>
-                  <input type="hidden" name="action" value="delete_exception">
-                  <input type="hidden" name="back" value="exceptions">
-                  <input type="hidden" name="exception_id" value="<?= (int) $e['id'] ?>">
-                  <button type="submit" class="btn btn--ghost btn--sm">Delete exception</button>
-                </form>
+                <p class="muted"><a href="<?= e($panel) ?>">Open the edit form</a></p>
               </div>
             </details>
           <?php else: ?>
@@ -378,42 +308,11 @@ function exc_url(array $over): string
             <td class="mono muted"><?= (int) $c['sort'] ?></td>
             <td class="right">
               <?php if ($canCats): ?>
-                <details class="detail detail--inline">
+                <?php $panel = '?page=exception_panel&what=category&id=' . (int) $c['id']; ?>
+                <details class="detail detail--inline" data-lazy="<?= e($panel) ?>">
                   <summary class="btn btn--ghost btn--xs">Adjust</summary>
                   <div class="detail__body detail__body--card">
-                    <form class="form form--sub" method="post" action="index.php">
-                      <?= csrf_field() ?>
-                      <input type="hidden" name="action" value="update_exception_category">
-                      <input type="hidden" name="back" value="exceptions">
-                      <input type="hidden" name="category_id" value="<?= (int) $c['id'] ?>">
-                      <div class="form__grid">
-                        <label class="field field--wide"><span>Name</span>
-                          <input type="text" name="name" maxlength="60" value="<?= e($c['name']) ?>">
-                        </label>
-                        <label class="field"><span>Accent</span>
-                          <select name="tone">
-                            <?php foreach (['red', 'blue', 'orange', 'green', 'neutral'] as $tone): ?>
-                              <option value="<?= $tone ?>" <?= $c['tone'] === $tone ? 'selected' : '' ?>><?= ucfirst($tone) ?></option>
-                            <?php endforeach; ?>
-                          </select>
-                        </label>
-                        <label class="field"><span>Order</span>
-                          <input type="number" name="sort" min="0" max="999" value="<?= (int) $c['sort'] ?>">
-                        </label>
-                      </div>
-                      <div class="form__actions">
-                        <button type="submit" class="btn btn--primary btn--sm">Save category</button>
-                        <span class="muted">Renaming moves its exceptions too.</span>
-                      </div>
-                    </form>
-                    <form class="inline-form inline-form--danger" method="post" action="index.php"
-                          data-confirm="Delete the category <?= e($c['name']) ?>?">
-                      <?= csrf_field() ?>
-                      <input type="hidden" name="action" value="delete_exception_category">
-                      <input type="hidden" name="back" value="exceptions">
-                      <input type="hidden" name="category_id" value="<?= (int) $c['id'] ?>">
-                      <button type="submit" class="btn btn--ghost btn--sm">Delete category</button>
-                    </form>
+                    <p class="muted"><a href="<?= e($panel) ?>">Open the category form</a></p>
                   </div>
                 </details>
               <?php else: ?>

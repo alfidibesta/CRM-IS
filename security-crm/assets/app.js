@@ -357,4 +357,40 @@
       remember(key, box.open ? '1' : '0');
     });
   });
+
+  /* -------------------------------- row panels, fetched when first opened */
+
+  // A register row ships a placeholder instead of its edit form; the form is
+  // asked for the first time the row is opened, and kept afterwards.
+  doc.addEventListener('toggle', function (e) {
+    var box = e.target;
+    if (!box || box.tagName !== 'DETAILS' || !box.open || !box.hasAttribute('data-lazy')) return;
+    if (box.getAttribute('data-lazy-loaded')) return;
+
+    var body = box.querySelector('.detail__body');
+    var url = box.getAttribute('data-lazy');
+    if (!body || !url) return;
+
+    if (isOffline()) {
+      markOffline();
+      body.innerHTML = '<p class="muted">Offline — the form was not loaded. Reconnect and try again.</p>';
+      return;
+    }
+
+    box.setAttribute('data-lazy-loaded', '1');
+    body.innerHTML = '<p class="muted">Loading…</p>';
+
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+      .then(function (html) {
+        body.innerHTML = html;
+        // The form was replaced under the pointer: keep the panel on screen.
+        body.scrollIntoView({ block: 'nearest' });
+      })
+      .catch(function (err) {
+        box.removeAttribute('data-lazy-loaded');
+        body.innerHTML = '<p class="muted">Could not load that form — reload the page and try again.</p>';
+        if (err instanceof TypeError) markOffline();
+      });
+  }, true);
 })();

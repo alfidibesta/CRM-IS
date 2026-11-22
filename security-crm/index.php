@@ -4,7 +4,7 @@
  *
  *   ?page=login | dashboard | sop | workflow | issues | issue | templates
  *              | template | exceptions | users | audit | logs | notifications
- *              | download | doc | issue_doc
+ *              | download | doc | issue_doc | exception_panel (a fragment)
  *
  * Every POST is an action guarded by CSRF and by a role permission.
  */
@@ -950,6 +950,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* ------------------------------------------------------------------ pages */
 
 $page = (string) ($_GET['page'] ?? 'dashboard');
+
+/* A lazily loaded panel: app.js fetches one when a register row's Edit button
+   opens, so the page itself ships a placeholder instead of a form per row. */
+if ($page === 'exception_panel') {
+    if (!is_logged_in()) {
+        http_response_code(401);
+        exit('Your session expired — sign in and reload the page.');
+    }
+    if (!can('page.exceptions')) {
+        http_response_code(403);
+        exit('Not permitted.');
+    }
+    header('Cache-Control: no-store');
+    require __DIR__ . '/views/exception_panel.php';
+    exit;
+}
+
 if (!in_array($page, $pages, true)) {
     $page = 'dashboard';
 }
