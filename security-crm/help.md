@@ -29,7 +29,7 @@ Open the site URL; you land on the sign-in screen.
 | **Administrator** | Everything: records, templates, exceptions, users, the permission matrix. |
 | **Security Manager** | All records and templates; approves and closes; no user administration. |
 | **Analyst** | Investigates: reports issues, uploads evidence, moves board cards, edits issues. |
-| **Viewer** | Read-only, including downloads. |
+| **Viewer** | Read-only registers, audit trail and report exports. Persons involved and evidence are restricted to the investigation roles. |
 
 Exact permissions per role are shown on **Users & Authority → Authority
 matrix**, which is generated from the same catalogue the code enforces, so the
@@ -106,10 +106,13 @@ The investigation record, in numbered sections:
 3. **Persons involved** — suspects and witnesses with employee number,
    department, position, shift, involvement (Primary, Accomplice, Witness,
    Victim, Unknown), contact, statement and whether they were interviewed.
+   Names, contact details and statements need `issue.person.read` (manager,
+   analyst, administrator); other roles see a restricted note instead.
 4. **Evidence & attachments** — upload files (PDF, images, Office documents,
    text, CSV, ZIP) with a kind label and a note; download or delete them again.
-   Downloads are audited and permission-checked; uploaded files are never served
-   as plain static files.
+   The list and its downloads need `file.download`, which the auditor/viewer
+   role does not hold. Downloads are audited and permission-checked; uploaded
+   files are never served as plain static files.
 5. **Remediation tasks** — cards linked to this issue; they appear on the
    workflow board.
 6. **Activity log** — every status change, field change, note, upload and task
@@ -214,7 +217,11 @@ entry before it, so a modified or deleted row breaks the chain:
 php tests/verify-audit.php
 ```
 
-That command reports the first entry whose stored hash no longer matches.
+That command reports the first entry whose stored hash no longer matches. After a clean walk it
+also compares the trail with the last line of `logs/audit-anchors.log` — the head hash kept
+outside the database — and appends a fresh one, so deleting the newest entries is detected too.
+Use `--no-anchor` for a read-only check, or `SECOPS_AUDIT_ANCHOR` to keep the file on another
+disk or share.
 
 ---
 

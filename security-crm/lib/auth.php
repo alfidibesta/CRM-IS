@@ -25,6 +25,7 @@ function permission_list(): array
         'issue.update'   => 'Edit issue fields, status and risk',
         'issue.note'     => 'Add notes to an issue',
         'issue.suspect'  => 'Add / remove suspect details',
+        'issue.person.read' => 'Read persons involved (names, contact, statements)',
         'issue.upload'   => 'Upload & remove evidence files',
         'issue.export'   => 'Download the issue report (.docx)',
         'task.create'    => 'Create tasks on the board',
@@ -33,7 +34,7 @@ function permission_list(): array
         'template.edit'  => 'Create / edit / delete templates',
         'exception.manage' => 'Add / edit / delete exceptions',
         'exception.category' => 'Manage exception categories',
-        'file.download'  => 'Download attached files',
+        'file.download'  => 'Read & download issue evidence',
         'user.manage'    => 'Manage users, roles and passwords',
     ];
 
@@ -54,7 +55,7 @@ function role_list(): array
             'hint'  => 'Runs the programme: every record plus template control',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
-                'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
+                'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
                 'task.create', 'task.move', 'task.delete', 'template.edit',
                 'exception.manage', 'exception.category', 'file.download', 'page.audit',
             ],
@@ -64,17 +65,17 @@ function role_list(): array
             'hint'  => 'Investigations, evidence and day-to-day board work',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
-                'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.upload', 'issue.export',
+                'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
                 'page.exceptions', 'exception.manage',
                 'task.create', 'task.move', 'file.download',
             ],
         ],
         'viewer' => [
             'label' => 'Auditor / Viewer',
-            'hint'  => 'Read-only: review, download and export',
+            'hint'  => 'Read-only: review the registers, the audit trail and exports',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
-                'page.exceptions', 'file.download', 'issue.export', 'page.audit',
+                'page.exceptions', 'issue.export', 'page.audit',
             ],
         ],
     ];

@@ -177,6 +177,30 @@ $first  = audit_chain_check(array_slice($chain, 0, 2));
 $second = audit_chain_check(array_slice($chain, 2), $first['tail']);
 ck('chain check continues across chunks', [$first['ok'], $second['ok'], $second['head']], [true, true, 3]);
 
+/* ------------------------------------------------- external audit anchor */
+$anchorRow = $chain[count($chain) - 1];
+$anchor    = audit_anchor_parse(audit_anchor_line($anchorRow, 3, '2026-11-22T09:00:00+00:00'));
+ck('anchor line round-trips', [$anchor['id'], $anchor['hash'], $anchor['checked']], [3, $anchorRow['row_hash'], 3]);
+ck('anchor parse rejects junk', audit_anchor_parse('2026-11-22 not an anchor'), null);
+ck('anchor parse rejects a short hash', audit_anchor_parse("2026-11-22T09:00:00+00:00\t3\tshort\t3"), null);
+
+ck('anchor verdict: nothing anchored', audit_anchor_verdict(null, null, 0)['reason'], 'none');
+ck('anchor verdict: intact', audit_anchor_verdict($anchor, ['row_hash' => $anchorRow['row_hash']], 3)['ok'], true);
+ck('anchor verdict: anchored row deleted', audit_anchor_verdict($anchor, null, 2)['reason'], 'deleted');
+ck('anchor verdict: anchored row rewritten', audit_anchor_verdict($anchor, ['row_hash' => str_repeat('0', 64)], 3)['reason'], 'rewritten');
+ck('anchor verdict: trail truncated', audit_anchor_verdict($anchor, ['row_hash' => $anchorRow['row_hash']], 1)['reason'], 'truncated');
+
+$anchorFile = sys_get_temp_dir() . '/secops-anchor-' . bin2hex(random_bytes(4)) . '.log';
+file_put_contents($anchorFile,
+    audit_anchor_line($chain[0], 2, '2026-11-21T09:00:00+00:00') . "\n"
+    . 'garbage line' . "\n"
+    . audit_anchor_line($anchorRow, 3, '2026-11-22T09:00:00+00:00') . "\n");
+$lastAnchor = audit_anchor_last($anchorFile);
+ck('anchor reads the newest line', [$lastAnchor['id'], $lastAnchor['checked']], [3, 3]);
+ck('anchor reports its file', $lastAnchor['file'], $anchorFile);
+@unlink($anchorFile);
+ck('anchor missing file is null', audit_anchor_last($anchorFile), null);
+
 /* --------------------------------------------------------- notifications */
 ck('kind label', notification_label('issue_assigned'), 'Assigned to you');
 ck('kind tone', notification_tone('issue_critical'), 'red');
@@ -251,6 +275,15 @@ foreach (role_list() as $role => $def) {
     }
 }
 ck('role grants exist in the catalogue', $badGrants, []);
+
+/* -------------------------------------- persons involved + evidence gate */
+ck('persons read permission exists', isset(permission_list()['issue.person.read']), true);
+foreach (['admin', 'manager', 'analyst'] as $role) {
+    ck($role . ' may read persons', in_array('issue.person.read', role_list()[$role]['perms'], true) || in_array('*', role_list()[$role]['perms'], true), true);
+    ck($role . ' may download evidence', in_array('file.download', role_list()[$role]['perms'], true) || in_array('*', role_list()[$role]['perms'], true), true);
+}
+ck('viewer may not read persons', in_array('issue.person.read', role_list()['viewer']['perms'], true), false);
+ck('viewer may not download evidence', in_array('file.download', role_list()['viewer']['perms'], true), false);
 
 /* -------------------------------------------------------------- client IP */
 

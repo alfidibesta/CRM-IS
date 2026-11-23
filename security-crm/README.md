@@ -91,6 +91,7 @@ or set environment variables, which take precedence:
 | `SECOPS_DB_NAME` | `security_crm` | database name (created if missing) |
 | `SECOPS_DEMO` | `1` | `0` hides the demo accounts on the sign-in screen |
 | `SECOPS_TRUSTED_PROXIES` | `127.0.0.1/32,::1/128` | proxies whose `X-Forwarded-For` may be believed (see [Intranet deployment](#intranet-deployment)) |
+| `SECOPS_AUDIT_ANCHOR` | `logs/audit-anchors.log` | file that keeps the audit trail's head hash outside the database (see [Tamper evidence](#tamper-evidence)) |
 
 On Apache, `SetEnv SECOPS_DB_USER secops` inside the vhost (or the folder's
 `.htaccess`) works; with the built-in server, prefix the command.
@@ -177,7 +178,7 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
 | `admin` | `Admin@123` | Administrator | Everything, including users & authority |
 | `manager` | `Manager@123` | Security Manager | Every record + template control |
 | `analyst` | `Analyst@123` | Security Analyst | Investigate, upload evidence, move cards |
-| `viewer` | `Viewer@123` | Auditor / Viewer | Read-only: review, download, export |
+| `viewer` | `Viewer@123` | Auditor / Viewer | Read-only: review the registers, audit trail and report exports |
 
 5 failed passwords lock an account for 15 minutes. Add or change accounts on
 **Users & Authority** (admin only).
@@ -300,7 +301,9 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |
-| Download files & export `.docx` | ✓ | ✓ | ✓ | ✓ |
+| Read persons involved (contact, statements) | ✓ | ✓ | ✓ | — |
+| Download evidence files | ✓ | ✓ | ✓ | — |
+| Export the issue report (`.docx`) | ✓ | ✓ | ✓ | ✓ (without persons or evidence) |
 | Read the audit trail | ✓ | ✓ | — | ✓ |
 | Manage users, roles, passwords | ✓ | — | — | — |
 
@@ -426,6 +429,7 @@ router.php           same denies for the PHP built-in server (php -S … router.
 tests/run.php        dependency-free unit checks (php tests/run.php)
 tests/verify-audit.php  re-reads the trail and checks its hash chain
 logs/app.log         error log written by the exception handler
+logs/audit-anchors.log  head hashes written by tests/verify-audit.php
 uploads/             evidence files (random names, direct access denied)
 ```
 
@@ -498,10 +502,17 @@ entry that does not match: a changed field reads as *no longer matches the hash*
 *carries no hash*. Exit code 0 means intact, 1 means broken or unreadable, so it can run from cron or
 a pre-audit checklist. Nothing on screen changed — the trail still reads the same columns.
 
-What it cannot see: deleting the newest entries (nothing follows them), or the very first entry
-(which links to an empty string). Keep the last hash somewhere outside the database, or keep a
-database dump, if those cases matter to you. Re-sealing is deliberately not offered: an existing
-hash is never rewritten, so a tampered chain stays tampered.
+What a chain alone cannot see: deleting the newest entries (nothing follows them), or the very
+first entry (which links to an empty string). The verifier therefore **anchors the head outside
+the database**: after a clean walk it appends the newest id and that entry's `row_hash` to
+`logs/audit-anchors.log` — or to the file named by `SECOPS_AUDIT_ANCHOR` — and on the next run it
+checks that the anchored entry is still there with the same hash. Deleting those entries, or
+restoring an older database over the trail, then fails with `audit anchor: BROKEN at entry #N`.
+`--no-anchor` verifies without advancing the file, for a read-only audit. Keep the anchor file (or
+a copy) on a different backup from the database, and run the verifier daily so the anchor keeps
+up: a deletion that happens after the last anchor is only named once the trail is anchored again.
+Re-sealing is deliberately not offered: an existing hash is never rewritten, so a tampered chain
+stays tampered.
 
 ## Known limitations
 

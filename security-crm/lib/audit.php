@@ -331,6 +331,147 @@ function audit_verify(PDO $pdo, int $limit = 0): array
             'head' => $head, 'newest' => $newest, 'tail' => $prev];
 }
 
+/* ------------------------------------------------------- external anchors */
+
+/**
+ * The anchor file: one line per verification run, outside the database.
+ *
+ * On the same host as the app by default (logs/ is denied by .htaccess and
+ * router.php); SECOPS_AUDIT_ANCHOR points it at another disk or a share, which
+ * is what makes a database restore or a row deletion visible.
+ */
+function audit_anchor_file(?string $file = null): string
+{
+    if ($file !== null && $file !== '') {
+        return $file;
+    }
+    $env = getenv('SECOPS_AUDIT_ANCHOR');
+    if (is_string($env) && trim($env) !== '') {
+        return trim($env);
+    }
+    return dirname(__DIR__) . '/logs/audit-anchors.log';
+}
+
+/**
+ * One anchor line: when, the newest id, that entry's hash, entries checked.
+ * Tab-separated so the file stays readable with `cat` and cheap to append.
+ */
+function audit_anchor_line(array $row, int $checked, ?string $at = null): string
+{
+    return ($at ?? date('c')) . "\t" . (int) ($row['id'] ?? 0) . "\t"
+        . (string) ($row['row_hash'] ?? '') . "\t" . max(0, $checked);
+}
+
+/** Parse an anchor line back into its fields; null when it is not one. */
+function audit_anchor_parse(string $line): ?array
+{
+    $parts = explode("\t", rtrim($line, "\r\n"));
+    if (count($parts) !== 4) {
+        return null;
+    }
+    [$at, $id, $hash, $checked] = $parts;
+    if ($id === '' || !ctype_digit($id) || strlen($hash) !== 64 || !ctype_xdigit($hash) || !ctype_digit($checked)) {
+        return null;
+    }
+
+    return ['at' => $at, 'id' => (int) $id, 'hash' => strtolower($hash), 'checked' => (int) $checked];
+}
+
+/** The most recent anchor line, or null when nothing has been anchored yet. */
+function audit_anchor_last(?string $file = null): ?array
+{
+    $file = audit_anchor_file($file);
+    if (!is_file($file) || !is_readable($file)) {
+        return null;
+    }
+
+    $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!$lines) {
+        return null;
+    }
+
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        $anchor = audit_anchor_parse((string) $lines[$i]);
+        if ($anchor !== null) {
+            return $anchor + ['file' => $file];
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Judge the anchored entry against the live trail. Pure, so the tests can
+ * cover every branch without a database.
+ *
+ * @param array|null $anchor the last anchor line (id + hash)
+ * @param array|null $stored the row at that id, or null when it is gone
+ * @param int        $newest the highest id in audit_log right now
+ * @return array{ok: bool, reason: string, id?: int, newest?: int}
+ */
+function audit_anchor_verdict(?array $anchor, ?array $stored, int $newest): array
+{
+    if ($anchor === null) {
+        return ['ok' => true, 'reason' => 'none'];
+    }
+
+    $id = (int) $anchor['id'];
+    if ($stored === null) {
+        return ['ok' => false, 'reason' => 'deleted', 'id' => $id];
+    }
+    if (!hash_equals((string) $anchor['hash'], (string) ($stored['row_hash'] ?? ''))) {
+        return ['ok' => false, 'reason' => 'rewritten', 'id' => $id];
+    }
+    if ($newest < $id) {
+        return ['ok' => false, 'reason' => 'truncated', 'id' => $id];
+    }
+
+    return ['ok' => true, 'reason' => 'ok', 'id' => $id, 'newest' => $newest];
+}
+
+/** Compare the newest anchor line with the database. */
+function audit_anchor_check(PDO $pdo, ?array $anchor = null): array
+{
+    $anchor = $anchor ?? audit_anchor_last();
+    $newest = (int) $pdo->query('SELECT COALESCE(MAX(id), 0) FROM audit_log')->fetchColumn();
+    $stored = null;
+
+    if ($anchor !== null) {
+        $st = $pdo->prepare('SELECT id, row_hash FROM audit_log WHERE id = ?');
+        $st->execute([(int) $anchor['id']]);
+        $stored = $st->fetch() ?: null;
+    }
+
+    return audit_anchor_verdict($anchor, $stored, $newest) + ['anchor' => $anchor];
+}
+
+/**
+ * Append the current head to the anchor file. Called by the verifier after a
+ * clean walk, so each run records the newest entry the database had.
+ *
+ * @return array{ok: bool, file?: string, id?: int, error?: string}
+ */
+function audit_anchor_write(PDO $pdo, int $checked, ?string $file = null): array
+{
+    $file = audit_anchor_file($file);
+    $row  = $pdo->query('SELECT id, row_hash FROM audit_log ORDER BY id DESC LIMIT 1')->fetch();
+    if (!$row) {
+        return ['ok' => false, 'error' => 'the trail is empty', 'file' => $file];
+    }
+
+    $dir = dirname($file);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+        return ['ok' => false, 'error' => 'cannot create ' . $dir, 'file' => $file];
+    }
+
+    $line = audit_anchor_line($row, $checked) . PHP_EOL;
+    if (@file_put_contents($file, $line, FILE_APPEND | LOCK_EX) === false) {
+        return ['ok' => false, 'error' => 'cannot append to ' . $file, 'file' => $file];
+    }
+
+    return ['ok' => true, 'file' => $file, 'id' => (int) $row['id']];
+}
+
 /**
  * Seal entries that carry no hash yet, in id order.
  *

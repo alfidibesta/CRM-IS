@@ -1101,10 +1101,14 @@ if ($page === 'issue_doc') {
     $form = issue_report_template($pdo, $issue);
     $fill = issue_report_fill($issue, $ctx);
 
-    audit('issue.export', 'issue', (int) $issue['id'], (string) $issue['code'], 'Report exported as .docx');
+    // Persons and evidence leave the app only for roles that may read them.
+    $sensitive = can('issue.person.read') && can('file.download');
+
+    audit('issue.export', 'issue', (int) $issue['id'], (string) $issue['code'],
+        'Report exported as .docx' . ($sensitive ? '' : ' (persons and evidence omitted)'));
 
     docx_send($issue['code'] . '-issue-report.docx',
-        docx_package(issue_report_blocks($issue, $ctx, $form), $fill, [
+        docx_package(issue_report_blocks($issue, $ctx, $form, $sensitive), $fill, [
             'title'   => $issue['code'] . ' — Information Security Issue Report',
             'creator' => 'SecOps CRM · ' . current_user_name(),
         ]));

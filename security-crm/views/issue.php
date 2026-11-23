@@ -32,6 +32,7 @@ $imp      = (int) $issue['impact'];
 $canEdit     = can('issue.update');
 $canNote     = can('issue.note');
 $canSuspect  = can('issue.suspect');
+$canPersons  = can('issue.person.read');
 $canUpload   = can('issue.upload');
 $canExport   = can('issue.export');
 $canDownload = can('file.download');
@@ -44,7 +45,7 @@ $rctx       = ['suspects' => $suspects, 'files' => $files, 'tasks' => $tasks, 'e
 $formTpl    = issue_report_template($pdo, $issue);
 $formLayout = issue_report_body($issue, $formTpl);
 $formFill   = issue_report_fill($issue, $rctx);
-$formBlocks = issue_report_blocks($issue, $rctx, $formTpl);
+$formBlocks = issue_report_blocks($issue, $rctx, $formTpl, $canPersons && $canDownload);
 $adjusted   = trim((string) $issue['report_body']) !== '';
 $allTpls    = $pdo->query('SELECT id, code, name, category, version FROM templates ORDER BY code')->fetchAll();
 $allTags    = known_tags($pdo);
@@ -72,7 +73,7 @@ $allTags    = known_tags($pdo);
       <div><dt>Reported</dt><dd><?= fmt_date($issue['reported_at']) ?> by <?= e($issue['reported_by']) ?: '—' ?></dd></div>
       <div><dt>Target close</dt><dd><?= fmt_date($issue['due_at']) ?></dd></div>
       <div><dt>Reviewed by</dt><dd><?= e($issue['reviewed_by']) ?: '—' ?></dd></div>
-      <div><dt>Attachments</dt><dd><?= $fileCount ?> file<?= $fileCount === 1 ? '' : 's' ?> · <?= $suspectCount ?> person<?= $suspectCount === 1 ? '' : 's' ?></dd></div>
+      <div><dt>Attachments</dt><dd><?= $fileCount ?> file<?= $fileCount === 1 ? '' : 's' ?><?php if ($canPersons): ?> · <?= $suspectCount ?> person<?= $suspectCount === 1 ? '' : 's' ?><?php endif; ?></dd></div>
     </dl>
   </div>
 
@@ -355,10 +356,12 @@ $allTags    = known_tags($pdo);
   <section class="card">
     <header class="card__head">
       <h2>3 · Persons involved</h2>
-      <span class="muted"><?= $suspectCount ?> record<?= $suspectCount === 1 ? '' : 's' ?></span>
+      <span class="muted"><?= $canPersons ? $suspectCount . ' record' . ($suspectCount === 1 ? '' : 's') : 'Restricted' ?></span>
     </header>
 
-    <?php if (!$suspects): ?>
+    <?php if (!$canPersons): ?>
+      <p class="readnote">Restricted — names, contact details and statements are available to the investigation roles.</p>
+    <?php elseif (!$suspects): ?>
       <p class="empty empty--sm">No suspects, witnesses or victims recorded yet.</p>
     <?php else: ?>
       <div class="table-wrap">
@@ -405,7 +408,7 @@ $allTags    = known_tags($pdo);
       </div>
     <?php endif; ?>
 
-    <?php if ($canSuspect): ?>
+    <?php if ($canPersons && $canSuspect): ?>
       <details class="panel panel--sub" <?= $suspects ? '' : 'open' ?>>
         <summary class="btn btn--ghost btn--summary btn--sm">+ Add person</summary>
         <form class="form form--sub" method="post" action="index.php">
@@ -450,7 +453,9 @@ $allTags    = known_tags($pdo);
       <span class="muted"><?= $fileCount ?> file<?= $fileCount === 1 ? '' : 's' ?></span>
     </header>
 
-    <?php if ($files): ?>
+    <?php if (!$canDownload): ?>
+      <p class="readnote">Restricted — the evidence list and its downloads are available to the investigation roles.</p>
+    <?php elseif ($files): ?>
       <ul class="filelist">
         <?php foreach ($files as $f): ?>
           <li class="filelist__item">

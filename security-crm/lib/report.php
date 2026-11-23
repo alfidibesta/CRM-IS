@@ -113,8 +113,10 @@ function issue_report_body(array $issue, ?array $tpl): string
  * @param array      $issue the issues row
  * @param array      $ctx   suspects, files, tasks, events
  * @param array|null $tpl   report form template bound to the issue
+ * @param bool       $includeSensitive false for a role that may not read persons
+ *                                    involved or evidence (auditor / viewer)
  */
-function issue_report_blocks(array $issue, array $ctx = [], ?array $tpl = null): array
+function issue_report_blocks(array $issue, array $ctx = [], ?array $tpl = null, bool $includeSensitive = true): array
 {
     $suspects = $ctx['suspects'] ?? [];
     $files    = $ctx['files'] ?? [];
@@ -190,7 +192,9 @@ function issue_report_blocks(array $issue, array $ctx = [], ?array $tpl = null):
     $b[] = ['t' => 'p', 'text' => '**Corrective / preventive action:** ' . (string) ($issue['corrective_action'] ?: '—')];
 
     $b[] = ['t' => 'h2', 'text' => $label('Persons involved (suspects / witnesses)')];
-    if ($suspects) {
+    if (!$includeSensitive) {
+        $b[] = ['t' => 'p', 'text' => 'Restricted — persons involved are shown only to the investigation roles.'];
+    } elseif ($suspects) {
         $rows = [['Name', 'Employee no.', 'Department', 'Position', 'Shift', 'Involvement', 'Interviewed']];
         foreach ($suspects as $s) {
             $rows[] = [
@@ -214,7 +218,9 @@ function issue_report_blocks(array $issue, array $ctx = [], ?array $tpl = null):
     }
 
     $b[] = ['t' => 'h2', 'text' => $label('Evidence & attachments')];
-    if ($files) {
+    if (!$includeSensitive) {
+        $b[] = ['t' => 'p', 'text' => 'Restricted — the evidence list and its downloads are shown only to the investigation roles.'];
+    } elseif ($files) {
         $rows = [['File', 'Type', 'Kind', 'Size', 'Uploaded by', 'Date']];
         foreach ($files as $f) {
             $rows[] = [
