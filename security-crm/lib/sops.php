@@ -155,29 +155,40 @@ function sop_next_revision_no(PDO $pdo, int $sopId): int
  */
 function sop_save_revision(PDO $pdo, int $sopId, array $row, string $reason, string $by): int
 {
-    $pdo->prepare('INSERT INTO sop_revisions
-            (sop_id, revision_no, code, title, type, scope, version, owner, status,
-             effective_at, review_at, summary, content, change_reason, changed_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([
-            $sopId,
-            sop_next_revision_no($pdo, $sopId),
-            (string) $row['code'],
-            (string) $row['title'],
-            (string) $row['type'],
-            (string) $row['scope'],
-            (string) $row['version'],
-            (string) $row['owner'],
-            (string) $row['status'],
-            $row['effective_at'] ?? null,
-            $row['review_at'] ?? null,
-            (string) ($row['summary'] ?? ''),
-            (string) ($row['content'] ?? ''),
-            clamp($reason, SOP_CHANGE_REASON_MAX),
-            clamp($by, 100),
-        ]);
+    // Two saves of the same document at the same moment would read the same
+    // "next" number; the unique key rejects one of them, so try once more with
+    // the number that just became free instead of failing the save.
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            $pdo->prepare('INSERT INTO sop_revisions
+                    (sop_id, revision_no, code, title, type, scope, version, owner, status,
+                     effective_at, review_at, summary, content, change_reason, changed_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([
+                    $sopId,
+                    sop_next_revision_no($pdo, $sopId),
+                    (string) $row['code'],
+                    (string) $row['title'],
+                    (string) $row['type'],
+                    (string) $row['scope'],
+                    (string) $row['version'],
+                    (string) $row['owner'],
+                    (string) $row['status'],
+                    $row['effective_at'] ?? null,
+                    $row['review_at'] ?? null,
+                    (string) ($row['summary'] ?? ''),
+                    (string) ($row['content'] ?? ''),
+                    clamp($reason, SOP_CHANGE_REASON_MAX),
+                    clamp($by, 100),
+                ]);
 
-    return (int) $pdo->lastInsertId();
+            return (int) $pdo->lastInsertId();
+        } catch (PDOException $e) {
+            if ($attempt >= 2 || (string) $e->getCode() !== '23000') {
+                throw $e;
+            }
+        }
+    }
 }
 
 /** Latest revision id of every document: sop_id => revision id. */
@@ -191,16 +202,24 @@ function sop_revision_head_ids(PDO $pdo): array
     return $heads;
 }
 
-/** Revisions of several documents, newest first per document. */
-function sop_revision_lists(PDO $pdo, array $sopIds): array
+/**
+ * Revisions of several documents, newest first per document.
+ *
+ * The controlled text is deliberately left out: the library lists every
+ * document's history, and embedding a 60 kB body per revision would turn one
+ * page into megabytes. Open a snapshot with ?page=sop&rev=ID to read it.
+ */
+function sop_revision_history(PDO $pdo, array $sopIds): array
 {
     $sopIds = array_values(array_filter(array_map('intval', $sopIds)));
     if (!$sopIds) {
         return [];
     }
     $in = implode(',', array_fill(0, count($sopIds), '?'));
-    $st = $pdo->prepare("SELECT * FROM sop_revisions WHERE sop_id IN ($in)
-                         ORDER BY sop_id, revision_no DESC");
+    $st = $pdo->prepare("SELECT id, sop_id, revision_no, code, title, type, scope, version, owner, status,
+                                effective_at, review_at, summary, change_reason, changed_by, changed_at
+                           FROM sop_revisions WHERE sop_id IN ($in)
+                          ORDER BY sop_id, revision_no DESC");
     $st->execute($sopIds);
 
     $out = [];
@@ -212,6 +231,15 @@ function sop_revision_lists(PDO $pdo, array $sopIds): array
     }
 
     return $out;
+}
+
+/** One stored snapshot, with its controlled text. */
+function sop_revision_fetch(PDO $pdo, int $revisionId): ?array
+{
+    $st = $pdo->prepare('SELECT * FROM sop_revisions WHERE id = ?');
+    $st->execute([$revisionId]);
+
+    return $st->fetch() ?: null;
 }
 
 /** Give every document without a history a baseline revision (idempotent). */
@@ -229,15 +257,27 @@ function sop_backfill_revisions(PDO $pdo): int
 
 /* ----------------------------------------------- policy acknowledgement */
 
-/** Every acknowledgement, keyed by document: sop_id => list of rows. */
-function sop_ack_map(PDO $pdo): array
+/**
+ * Acknowledgements for the documents on screen, keyed by document.
+ *
+ * @param list<int> $sopIds only read these documents
+ */
+function sop_ack_map(PDO $pdo, array $sopIds): array
 {
+    $sopIds = array_values(array_filter(array_map('intval', $sopIds)));
+    if (!$sopIds) {
+        return [];
+    }
+    $in = implode(',', array_fill(0, count($sopIds), '?'));
+    $st = $pdo->prepare("SELECT a.sop_id, a.user_id, a.revision_id, a.version, a.acknowledged_at
+                           FROM sop_acknowledgements a
+                           JOIN users u ON u.id = a.user_id
+                          WHERE a.sop_id IN ($in)
+                          ORDER BY a.acknowledged_at DESC");
+    $st->execute($sopIds);
+
     $out = [];
-    $sql = 'SELECT a.sop_id, a.user_id, a.revision_id, a.version, a.acknowledged_at
-              FROM sop_acknowledgements a
-              JOIN users u ON u.id = a.user_id
-             ORDER BY a.acknowledged_at DESC';
-    foreach ($pdo->query($sql) as $row) {
+    foreach ($st->fetchAll() as $row) {
         $out[(int) $row['sop_id']][] = $row;
     }
 

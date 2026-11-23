@@ -61,6 +61,44 @@ if ($draft === null && $edit !== null) {
 /** Field value for the create/edit form: the kept draft, else a default. */
 $sopVal = static fn(string $key, string $default = ''): string => (string) ($draft[$key] ?? $default);
 
+// One stored version, opened from a document's history: its own page, so the
+// controlled text of every revision is not embedded in the register.
+$revId = (int) ($_GET['rev'] ?? 0);
+if ($revId > 0) {
+    $rev = sop_revision_fetch($pdo, $revId);
+    if ($rev === null) {
+        echo '<section class="card"><p class="muted">That version no longer exists.</p>'
+            . '<p><a class="btn btn--ghost btn--sm" href="?page=sop">Back to the library</a></p></section>';
+        return;
+    }
+    ?>
+    <section class="card">
+      <p><a class="btn btn--ghost btn--xs" href="?page=sop">← Back to the library</a></p>
+      <p class="muted"><?= e((string) $rev['code']) ?> · revision <?= (int) $rev['revision_no'] ?> · <?= e((string) $rev['type']) ?> · <?= e((string) $rev['scope']) ?></p>
+      <h2 class="strong"><?= e((string) $rev['title']) ?></h2>
+      <p class="rev__head">
+        <strong>v<?= e((string) $rev['version']) ?></strong>
+        <?= badge((string) $rev['status'], status_tone((string) $rev['status'])) ?>
+        <span class="muted">saved <?= e(fmt_date(substr((string) $rev['changed_at'], 0, 10))) ?> by <?= e((string) $rev['changed_by']) ?></span>
+      </p>
+      <p class="footnote"><?= e((string) $rev['change_reason']) ?></p>
+      <dl class="kv">
+        <dt>Owner</dt><dd><?= e((string) $rev['owner']) ?></dd>
+        <dt>Effective</dt><dd><?= fmt_date($rev['effective_at']) ?></dd>
+        <dt>Next review</dt><dd><?= fmt_date($rev['review_at']) ?></dd>
+      </dl>
+      <?php if ((string) $rev['summary'] !== ''): ?><p><?= e((string) $rev['summary']) ?></p><?php endif; ?>
+      <?php if (trim((string) $rev['content']) !== ''): ?>
+        <div class="doc doc--sop"><?= blocks_to_html(parse_template_body((string) $rev['content'])) ?></div>
+      <?php else: ?>
+        <p class="muted">This version had no controlled text.</p>
+      <?php endif; ?>
+      <p class="footnote">This is the document exactly as it was saved; the register shows the current version.</p>
+    </section>
+    <?php
+    return;
+}
+
 $sopStats = [
     'all'      => $total,
     'active'   => $total - (int) ($byStatus['Draft'] ?? 0) - (int) ($byStatus['Obsolete'] ?? 0),
@@ -71,11 +109,11 @@ $sopStats = [
 // Document control: revision history and who has read the current one.
 $me          = (int) (current_user()['id'] ?? 0);
 $heads       = sop_revision_head_ids($pdo);
-$ackRows     = sop_ack_map($pdo);
+$ackRows     = sop_ack_map($pdo, array_column($rows, 'id'));
 $activeUsers = $pdo->query('SELECT id, name FROM users WHERE active = 1 ORDER BY name')->fetchAll();
 $activeIds   = array_map('intval', array_column($activeUsers, 'id'));
 $userNames   = array_column($activeUsers, 'name', 'id');
-$history     = sop_revision_lists($pdo, array_column($rows, 'id'));
+$history     = sop_revision_history($pdo, array_column($rows, 'id'));
 $canAck      = can('sop.acknowledge');
 ?>
 
@@ -275,7 +313,7 @@ $canAck      = can('sop.acknowledge');
 
               <?php if ($revs): ?>
                 <details class="panel--sub">
-                  <summary class="detail--inline">Version history (<?= count($revs) ?>)</summary>
+                  <summary class="btn btn--ghost btn--xs">Version history (<?= count($revs) ?>)</summary>
                   <div class="revs">
                     <?php foreach ($revs as $n => $rv): ?>
                       <?php
@@ -290,21 +328,13 @@ $canAck      = can('sop.acknowledge');
                         </p>
                         <p class="footnote"><?= e((string) $rv['change_reason']) ?></p>
                         <p class="footnote"><?= $older ? ($diff ? 'Changed: ' . e(implode(', ', $diff)) : 'No field changed') : 'First recorded version' ?></p>
-                        <details>
-                          <summary class="btn btn--ghost btn--xs">Read this version</summary>
-                          <div class="detail__body">
-                            <p><strong><?= e((string) $rv['title']) ?></strong></p>
-                            <?php if ((string) $rv['summary'] !== ''): ?><p class="muted"><?= e((string) $rv['summary']) ?></p><?php endif; ?>
-                            <?php if (trim((string) $rv['content']) !== ''): ?>
-                              <div class="doc doc--sop"><?= blocks_to_html(parse_template_body((string) $rv['content'])) ?></div>
-                            <?php else: ?>
-                              <p class="muted">This version had no controlled text.</p>
-                            <?php endif; ?>
-                          </div>
-                        </details>
+                        <p><a class="btn btn--ghost btn--xs" href="?page=sop&amp;rev=<?= (int) $rv['id'] ?>">Read this version</a></p>
                       </article>
                     <?php endforeach; ?>
                   </div>
+                  <?php if (count($revs) >= SOP_HISTORY_LIMIT): ?>
+                    <p class="footnote">The latest <?= SOP_HISTORY_LIMIT ?> versions are listed; older ones are still stored but not shown here.</p>
+                  <?php endif; ?>
                 </details>
               <?php endif; ?>
             </div>
@@ -318,7 +348,9 @@ $canAck      = can('sop.acknowledge');
         <td class="nowrap"><?= fmt_date($r['review_at']) ?></td>
         <td><?= badge($r['status'], status_tone($r['status'])) ?></td>
         <td class="nowrap">
-          <?php if ($canManage): ?>
+          <?php if ($canManage && !$isLive): ?>
+            <span class="muted">—</span>
+          <?php elseif ($canManage): ?>
             <span title="Active accounts that have read this revision"><?= $cover['read'] ?>/<?= $cover['total'] ?></span>
             <?php if ($myAck['acked']): ?><span class="badge badge--green">you</span><?php endif; ?>
           <?php elseif ($myAck['acked']): ?>

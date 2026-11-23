@@ -351,6 +351,16 @@ foreach (['admin', 'manager', 'analyst', 'viewer'] as $role) {
 ck('acknowledging does not imply document control', in_array('sop.manage', role_list()['viewer']['perms'], true), false);
 ck('policy acknowledgement is a labelled audit event', audit_action_label('sop.acknowledge'), 'Policy acknowledged');
 
+// The EDLP register's column is source_system; the old name must not linger in
+// the schema, the seed, the create action or the view.
+ck('schema names the EDLP source-system column',
+    str_contains((string) file_get_contents(__DIR__ . '/../schema.sql'), '`source_system`'), true);
+$excSrc = $routerSrc . (string) file_get_contents(__DIR__ . '/../views/exceptions.php')
+    . (string) file_get_contents(__DIR__ . '/../lib/db.php');
+ck('no code reads or seeds the old exceptions system column',
+    str_contains($excSrc, "['system']") || str_contains($excSrc, '(system,'),
+    false);
+
 /* -------------------------------------------------------------- client IP */
 
 ck('cidr /8 matches', ip_matches_cidr('10.120.10.10', '10.0.0.0/8'), true);

@@ -66,7 +66,7 @@ function help_topics(): array
             'summary' => 'Controlled SOPs, policies and work instructions with type, scope, version, owner, status and next review date.',
             'steps'   => [
                 'Filter with the type and scope chips, or search by code, title and owner.',
-                'Click a row to expand the document preview, its metadata and its version history.',
+                'Click a row to expand the document preview, its metadata and its version history — "Read this version" opens a saved snapshot on its own page.',
                 'With document control use "+ New document" to add a policy, SOP or guideline, and "Edit document" on a row to change or delete it — every save asks why and keeps the previous text as a version.',
                 'On an Active document press "I have read vX" to record that you have read it; the Read column shows who has.',
                 '"+ New template" opens the form-template form on the Templates page.',

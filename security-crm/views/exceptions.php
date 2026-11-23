@@ -216,7 +216,7 @@ function exc_url(array $over): string
         <td class="cell-issue">
           <div class="cell-issue__head">
             <span class="mono"><?= e($e['code']) ?></span>
-            <span class="tag tag--blue"><?= e($e['system']) ?></span>
+            <span class="tag tag--blue"><?= e($e['source_system']) ?></span>
             <span class="strong"><?= e($e['title']) ?></span>
           </div>
 

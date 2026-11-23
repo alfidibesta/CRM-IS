@@ -161,9 +161,10 @@ date.
   document **Obsolete** so the history stays readable.
 - **Version history** — every save keeps a full snapshot of the document
   (all metadata plus the controlled text), the **reason for change** you type,
-  who saved it and when. Open a row and expand *Version history* to read any
-  earlier version. The first snapshot of an existing document is recorded as
-  its baseline, and a save that changes nothing does not create a revision.
+  who saved it and when. Open a row and expand *Version history* to list them;
+  *Read this version* opens that snapshot on its own page, exactly as it was
+  saved. The first snapshot of an existing document is recorded as its baseline,
+  and a save that changes nothing does not create a revision.
 - **Acknowledgement** — on an **Active** document, "I have read vX" records that
   you have read that exact revision. The **Read** column shows your own state,
   and for document control the count of active accounts that have read the

@@ -64,7 +64,7 @@ CREATE TABLE `exceptions` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `code` varchar(20) NOT NULL,
   `title` varchar(200) NOT NULL,
-  `system` varchar(40) NOT NULL DEFAULT 'EDLP',
+  `source_system` varchar(40) NOT NULL DEFAULT 'EDLP',
   `category` varchar(60) NOT NULL DEFAULT '',
   `target` varchar(180) NOT NULL DEFAULT '',
   `detail` text DEFAULT NULL,

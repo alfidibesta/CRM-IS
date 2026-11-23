@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261124;
+const SCHEMA_VERSION = 20261125;
 
 function db(array $cfg): PDO
 {
@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS exceptions (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     code          VARCHAR(20)  NOT NULL UNIQUE,
     title         VARCHAR(200) NOT NULL,
-    system        VARCHAR(40)  NOT NULL DEFAULT 'EDLP',
+    source_system VARCHAR(40)  NOT NULL DEFAULT 'EDLP',
     category      VARCHAR(60)  NOT NULL DEFAULT '',
     target        VARCHAR(180) NOT NULL DEFAULT '',
     detail        TEXT NULL,
@@ -386,6 +386,10 @@ SQL;
     if (function_exists('sop_backfill_revisions')) {
         sop_backfill_revisions($pdo);
     }
+
+    // EDLP register (20261125): "system" said nothing about what the value is;
+    // the column now names the source system. Existing values are kept.
+    ensure_renamed_column($pdo, 'exceptions', 'system', 'source_system', "VARCHAR(40) NOT NULL DEFAULT 'EDLP'");
 }
 
 /** Add missing columns to an existing table (no-op when present). */
@@ -400,6 +404,26 @@ function ensure_columns(PDO $pdo, string $table, array $defs): void
         if (!isset($have[strtolower($col)])) {
             $pdo->exec('ALTER TABLE `' . $table . '` ADD COLUMN `' . $col . '` ' . $ddl);
         }
+    }
+}
+
+/**
+ * Rename a column on an existing table, keeping its values.
+ *
+ * No-op when the table already uses the new name or never had the old one, so
+ * it is safe to run on every migration.
+ */
+function ensure_renamed_column(PDO $pdo, string $table, string $from, string $to, string $definition): void
+{
+    $st = $pdo->prepare('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+    $st->execute([$table]);
+    $have = [];
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $col) {
+        $have[strtolower((string) $col)] = true;
+    }
+    if (isset($have[strtolower($from)]) && !isset($have[strtolower($to)])) {
+        $pdo->exec('ALTER TABLE `' . $table . '` CHANGE COLUMN `' . $from . '` `' . $to . '` ' . $definition);
     }
 }
 
@@ -947,7 +971,7 @@ function seed_exceptions(PDO $pdo): void
     ];
 
     $st = $pdo->prepare('INSERT INTO exceptions
-        (code,title,system,category,target,detail,justification,control,period_start,period_end,status,risk_level,owner,approved_by,ref_no)
+        (code,title,source_system,category,target,detail,justification,control,period_start,period_end,status,risk_level,owner,approved_by,ref_no)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     foreach ($rows as $r) {
         $st->execute($r);

@@ -573,7 +573,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $code = 'EXC-' . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
 
             $pdo->prepare('INSERT INTO exceptions
-                    (code,title,system,category,target,detail,justification,control,period_start,period_end,
+                    (code,title,source_system,category,target,detail,justification,control,period_start,period_end,
                      status,risk_level,owner,approved_by,ref_no)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([
@@ -848,11 +848,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $row = $fields;
             unset($row['change_reason']);
-            $pdo->prepare('UPDATE sops SET code=:code, title=:title, type=:type, scope=:scope, version=:version,
-                                  owner=:owner, status=:status, effective_at=:effective_at, review_at=:review_at,
-                                  summary=:summary, content=:content WHERE id=:id')
-                ->execute($row + ['id' => $sid]);
-            sop_save_revision($pdo, $sid, $fields, (string) $fields['change_reason'], $u);
+
+            // The document and its snapshot are one controlled record: either
+            // both land or neither does.
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare('UPDATE sops SET code=:code, title=:title, type=:type, scope=:scope, version=:version,
+                                      owner=:owner, status=:status, effective_at=:effective_at, review_at=:review_at,
+                                      summary=:summary, content=:content WHERE id=:id')
+                    ->execute($row + ['id' => $sid]);
+                sop_save_revision($pdo, $sid, $fields, (string) $fields['change_reason'], $u);
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $e;
+            }
             audit('sop.update', 'sop', $sid, (string) $fields['code'], (string) $fields['title']
                 . ((string) $was['code'] !== $fields['code'] ? ' (was ' . $was['code'] . ')' : '')
                 . ' — ' . implode(', ', $changed) . ': ' . $fields['change_reason']);

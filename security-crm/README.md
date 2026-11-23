@@ -248,6 +248,9 @@ every saved version with its reason and author, and `sop_acknowledgements`
 records who read which revision. Both tables are created on the next request and
 give each existing document a baseline revision; nothing else changes.
 
+Build `20261125` renames `exceptions.system` to `exceptions.source_system`; the
+column is renamed in place on the next request, so existing values are kept.
+
 This build (`20261122`) adds `prev_hash` and `row_hash` to `audit_log` and seals
 the entries that already exist, once, in id order. It is additive and reversible:
 back up first, because re-sealing recomputes the chain.
