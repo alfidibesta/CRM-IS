@@ -48,6 +48,7 @@ require __DIR__ . '/lib/uploads.php';
 require __DIR__ . '/lib/templates.php';
 require __DIR__ . '/lib/word.php';
 require __DIR__ . '/lib/report.php';
+require __DIR__ . '/lib/sops.php';
 
 $cfg = require __DIR__ . '/config.php';
 $GLOBALS['secops_config'] = $cfg;   // client_ip() reads trusted_proxies from here
@@ -128,6 +129,18 @@ function back_to(string $back, int $id = 0): void
         $url .= '&id=' . $id;
     }
     header('Location: ' . $url);
+    exit;
+}
+
+/**
+ * Send a rejected document back to its form with the reason and the typed
+ * values, so a long controlled text is not lost to a validation error.
+ */
+function sop_form_back(string $err, array $draft, int $editId = 0): void
+{
+    $_SESSION['form_error'] = $err;
+    $_SESSION['sop_draft']  = $draft;
+    header('Location: ?page=sop' . ($editId > 0 ? '&edit=' . $editId : '&new=1'));
     exit;
 }
 
@@ -785,85 +798,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             back_to($back, $backId);
 
         case 'create_sop':
-            $code  = strtoupper(clamp(preg_replace('/[^A-Za-z0-9._-]/', '', (string) ($_POST['code'] ?? '')) ?? '', 20));
-            $title = clamp($_POST['title'] ?? '', 200);
-            if ($title === '') {
-                $_SESSION['form_error'] = 'A document title is required.';
-                back_to('sop');
+            [$fields, $err] = sop_fields($_POST);
+            if ($err !== '') {
+                sop_form_back($err, $fields);
             }
-            if ($code === '') {
-                $code = 'SOP-' . str_pad((string) ((int) $pdo->query('SELECT COUNT(*) FROM sops')->fetchColumn() + 1), 3, '0', STR_PAD_LEFT);
-            }
-            $dup = $pdo->prepare('SELECT id FROM sops WHERE code = ?');
-            $dup->execute([$code]);
-            if ($dup->fetchColumn()) {
-                $_SESSION['form_error'] = "A document with code {$code} already exists.";
-                back_to('sop');
+            if ($fields['code'] === '') {
+                $fields['code'] = sop_next_code($pdo, (string) $fields['scope']);
+            } elseif (sop_code_taken($pdo, (string) $fields['code'])) {
+                sop_form_back("A document with code {$fields['code']} already exists.", $fields);
             }
 
             $pdo->prepare('INSERT INTO sops (code,title,type,scope,version,owner,status,effective_at,review_at,summary,content)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-                ->execute([
-                    $code,
-                    $title,
-                    in_array($_POST['type'] ?? '', ['Policy', 'SOP', 'Guideline'], true) ? $_POST['type'] : 'SOP',
-                    in_array($_POST['scope'] ?? '', ['Physical', 'IT', 'Strain', 'General'], true) ? $_POST['scope'] : 'General',
-                    clamp($_POST['version'] ?? '1.0', 10) ?: '1.0',
-                    clamp($_POST['owner'] ?? '', 100),
-                    in_array($_POST['status'] ?? '', ['Active', 'Draft', 'In Review', 'Obsolete'], true) ? $_POST['status'] : 'Draft',
-                    date_or($_POST['effective_at'] ?? '', null),
-                    date_or($_POST['review_at'] ?? '', null),
-                    clamp($_POST['summary'] ?? '', 500),
-                    mb_substr((string) ($_POST['content'] ?? ''), 0, 60000),
-                ]);
+                           VALUES (:code,:title,:type,:scope,:version,:owner,:status,:effective_at,:review_at,:summary,:content)')
+                ->execute($fields);
             $sid = (int) $pdo->lastInsertId();
-            audit('sop.create', 'sop', $sid, $code, $title);
-            flash("Document {$code} created.");
+            audit('sop.create', 'sop', $sid, (string) $fields['code'], (string) $fields['title']);
+            flash("Document {$fields['code']} created.");
             back_to('sop');
 
         case 'update_sop':
             $sid = (int) ($_POST['sop_id'] ?? 0);
-            $st  = $pdo->prepare('SELECT code, title FROM sops WHERE id = ?');
+            $st  = $pdo->prepare('SELECT code FROM sops WHERE id = ?');
             $st->execute([$sid]);
-            $before = $st->fetch();
+            $was = $st->fetchColumn();
 
-            $code  = strtoupper(clamp(preg_replace('/[^A-Za-z0-9._-]/', '', (string) ($_POST['code'] ?? '')) ?? '', 20));
-            $title = clamp($_POST['title'] ?? '', 200);
-
-            if (!$before) {
-                $_SESSION['form_error'] = 'Document not found.';
+            [$fields, $err] = sop_fields($_POST, true);
+            if ($err !== '') {
+                sop_form_back($err, $fields, $sid);
+            }
+            if ($was === false) {
+                $_SESSION['form_error'] = 'That document no longer exists; nothing was saved.';
                 back_to('sop');
             }
-            if ($code === '' || $title === '') {
-                $_SESSION['form_error'] = 'A document code and title are required.';
-                back_to('sop');
-            }
-            $dup = $pdo->prepare('SELECT id FROM sops WHERE code = ? AND id <> ?');
-            $dup->execute([$code, $sid]);
-            if ($dup->fetchColumn()) {
-                $_SESSION['form_error'] = "Another document already uses the code {$code}.";
-                back_to('sop');
+            if (sop_code_taken($pdo, (string) $fields['code'], $sid)) {
+                sop_form_back("Another document already uses the code {$fields['code']}.", $fields, $sid);
             }
 
-            $pdo->prepare('UPDATE sops SET code=?, title=?, type=?, scope=?, version=?, owner=?, status=?,
-                                  effective_at=?, review_at=?, summary=?, content=? WHERE id=?')
-                ->execute([
-                    $code,
-                    $title,
-                    in_array($_POST['type'] ?? '', ['Policy', 'SOP', 'Guideline'], true) ? $_POST['type'] : 'SOP',
-                    in_array($_POST['scope'] ?? '', ['Physical', 'IT', 'Strain', 'General'], true) ? $_POST['scope'] : 'General',
-                    clamp($_POST['version'] ?? '1.0', 10) ?: '1.0',
-                    clamp($_POST['owner'] ?? '', 100),
-                    in_array($_POST['status'] ?? '', ['Active', 'Draft', 'In Review', 'Obsolete'], true) ? $_POST['status'] : 'Draft',
-                    date_or($_POST['effective_at'] ?? '', null),
-                    date_or($_POST['review_at'] ?? '', null),
-                    clamp($_POST['summary'] ?? '', 500),
-                    mb_substr((string) ($_POST['content'] ?? ''), 0, 60000),
-                    $sid,
-                ]);
-            audit('sop.update', 'sop', $sid, $code, $title
-                . ((string) $before['code'] !== $code ? ' (was ' . $before['code'] . ')' : ''));
-            flash("Document {$code} saved.");
+            $pdo->prepare('UPDATE sops SET code=:code, title=:title, type=:type, scope=:scope, version=:version,
+                                  owner=:owner, status=:status, effective_at=:effective_at, review_at=:review_at,
+                                  summary=:summary, content=:content WHERE id=:id')
+                ->execute($fields + ['id' => $sid]);
+            audit('sop.update', 'sop', $sid, (string) $fields['code'], (string) $fields['title']
+                . ((string) $was !== $fields['code'] ? ' (was ' . $was . ')' : ''));
+            flash("Document {$fields['code']} saved.");
             back_to('sop');
 
         case 'delete_sop':

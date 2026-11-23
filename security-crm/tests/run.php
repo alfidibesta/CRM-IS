@@ -18,6 +18,7 @@ require __DIR__ . '/../lib/uploads.php';
 require __DIR__ . '/../lib/audit.php';
 require __DIR__ . '/../lib/notify.php';
 require __DIR__ . '/../lib/auth.php';
+require __DIR__ . '/../lib/sops.php';
 
 $pass = 0;
 $fail = 0;
@@ -288,6 +289,30 @@ ck('analyst may not manage SOPs', in_array('sop.manage', role_list()['analyst'][
 ck('viewer may not manage SOPs', in_array('sop.manage', role_list()['viewer']['perms'], true), false);
 ck('viewer may not read persons', in_array('issue.person.read', role_list()['viewer']['perms'], true), false);
 ck('viewer may not download evidence', in_array('file.download', role_list()['viewer']['perms'], true), false);
+
+/* ------------------------------------------------- document control fields */
+[$row, $err] = sop_fields([
+    'code' => 'phys-004', 'title' => '  Gate Log  ', 'type' => 'SOP', 'scope' => 'Physical',
+    'status' => 'Active', 'effective_at' => '2026-01-01', 'review_at' => '2027-01-01',
+]);
+ck('sop fields accept a valid document', $err, '');
+ck('sop fields upper-case the code', $row['code'], 'PHYS-004');
+ck('sop fields trim the title', $row['title'], 'Gate Log');
+ck('sop fields keep the dates', [$row['effective_at'], $row['review_at']], ['2026-01-01', '2027-01-01']);
+ck('sop fields default the version', $row['version'], '1.0');
+
+ck('sop fields reject a blank title', sop_fields(['title' => '   '])[1] !== '', true);
+ck('sop fields reject a code with a space', sop_fields(['title' => 'x', 'code' => 'ISMS 011'])[1] !== '', true);
+ck('sop fields reject a code over 20 chars', sop_fields(['title' => 'x', 'code' => str_repeat('A', 21)])[1] !== '', true);
+ck('sop fields accept a blank code on create', sop_fields(['title' => 'x'])[1], '');
+ck('sop fields require a code on edit', sop_fields(['title' => 'x'], true)[1] !== '', true);
+ck('sop fields reject review before effective', sop_fields(['title' => 'x', 'effective_at' => '2026-05-01', 'review_at' => '2026-04-01'])[1] !== '', true);
+ck('sop fields reject Active without a date', sop_fields(['title' => 'x', 'status' => 'Active'])[1] !== '', true);
+ck('sop fields reject oversized text', sop_fields(['title' => 'x', 'content' => str_repeat('a', SOP_CONTENT_MAX + 1)])[1] !== '', true);
+ck('sop fields fall back to the SOP type', sop_fields(['title' => 'x', 'type' => 'Bogus'])[0]['type'], 'SOP');
+ck('sop code prefixes follow the register',
+    [sop_code_prefix('Physical'), sop_code_prefix('IT'), sop_code_prefix('Strain'), sop_code_prefix('General')],
+    ['PHYS', 'IT', 'STRAIN', 'GEN']);
 
 /* -------------------------------------------------------------- client IP */
 

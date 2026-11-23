@@ -43,14 +43,23 @@ $activeFilters = ($type || $scope || $status || $q !== '');
 $canManage   = can('sop.manage');
 $canTemplate = can('template.edit');
 $editId      = (int) ($_GET['edit'] ?? 0);
-$edit        = null;
+
+// A rejected save hands its typed values back once, so nothing is retyped.
+$draft = $_SESSION['sop_draft'] ?? null;
+unset($_SESSION['sop_draft']);
+$draft = is_array($draft) ? $draft : null;
+
+$edit = null;
 if ($canManage && $editId > 0) {
     $est = $pdo->prepare('SELECT * FROM sops WHERE id = ?');
     $est->execute([$editId]);
     $edit = $est->fetch() ?: null;
 }
-/** Field value for the create/edit form: the row being edited, else a default. */
-$sopVal = static fn(string $key, string $default = ''): string => (string) ($edit[$key] ?? $default);
+if ($draft === null && $edit !== null) {
+    $draft = $edit;
+}
+/** Field value for the create/edit form: the kept draft, else a default. */
+$sopVal = static fn(string $key, string $default = ''): string => (string) ($draft[$key] ?? $default);
 
 $sopStats = [
     'all'      => $total,
@@ -113,7 +122,7 @@ $sopStats = [
 </div>
 
 <?php if ($canManage): ?>
-  <details class="panel" <?= ($edit || isset($_GET['new']) || !$rows) ? 'open' : '' ?>>
+  <details class="panel" <?= ($edit || $draft || isset($_GET['new'])) ? 'open' : '' ?>>
     <summary class="btn btn--primary btn--summary btn--sm"><?= $edit ? 'Edit ' . e((string) $edit['code']) : '+ New document' ?></summary>
     <form class="card form" method="post" action="index.php">
       <?= csrf_field() ?>
@@ -123,18 +132,18 @@ $sopStats = [
       <?php if ($edit): ?><input type="hidden" name="sop_id" value="<?= (int) $edit['id'] ?>"><?php endif; ?>
 
       <div class="form__grid">
-        <label class="field"><span>Code</span><input type="text" name="code" maxlength="20" value="<?= e($sopVal('code')) ?>" placeholder="ISMS-011"></label>
+        <label class="field"><span>Code<?= $edit ? ' *' : '' ?></span><input type="text" name="code" maxlength="20" pattern="[A-Za-z0-9._-]{1,20}" value="<?= e($sopVal('code')) ?>" placeholder="blank = auto" <?= $edit ? 'required' : '' ?>></label>
         <label class="field field--wide"><span>Title *</span><input type="text" name="title" required maxlength="200" value="<?= e($sopVal('title')) ?>" placeholder="e.g. Access Control Policy"></label>
         <label class="field"><span>Type</span>
           <select name="type">
-            <?php foreach (['Policy', 'SOP', 'Guideline'] as $t): ?>
+            <?php foreach (SOP_TYPES as $t): ?>
               <option <?= $sopVal('type', 'SOP') === $t ? 'selected' : '' ?>><?= $t ?></option>
             <?php endforeach; ?>
           </select>
         </label>
         <label class="field"><span>Scope</span>
           <select name="scope">
-            <?php foreach (['Physical', 'IT', 'Strain', 'General'] as $sc): ?>
+            <?php foreach (SOP_SCOPES as $sc): ?>
               <option <?= $sopVal('scope', 'General') === $sc ? 'selected' : '' ?>><?= $sc ?></option>
             <?php endforeach; ?>
           </select>
@@ -143,7 +152,7 @@ $sopStats = [
         <label class="field"><span>Owner</span><input type="text" name="owner" maxlength="100" value="<?= e($sopVal('owner', $edit ? '' : current_user_name())) ?>"></label>
         <label class="field"><span>Status</span>
           <select name="status">
-            <?php foreach (['Draft', 'In Review', 'Active', 'Obsolete'] as $stt): ?>
+            <?php foreach (SOP_STATUSES as $stt): ?>
               <option <?= $sopVal('status', 'Draft') === $stt ? 'selected' : '' ?>><?= $stt ?></option>
             <?php endforeach; ?>
           </select>
@@ -164,7 +173,7 @@ $sopStats = [
     </form>
 
     <?php if ($edit): ?>
-      <form class="inline-form" method="post" action="index.php" data-confirm="Delete this document permanently?">
+      <form class="inline-form inline-form--danger" method="post" action="index.php" data-confirm="Delete this document permanently?">
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="delete_sop">
         <input type="hidden" name="back" value="sop">

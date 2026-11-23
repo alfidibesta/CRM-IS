@@ -150,10 +150,12 @@ date.
 - Filter by type and scope chips, or search code, title and owner.
 - Open a row for the preview and the metadata.
 - **Add a document** (`sop.manage`, manager and administrator) — "+ New
-  document" takes a code (generated when left blank), title, type, scope,
-  version, owner, status, effective and review dates, summary and the
-  controlled text in the same light markup the issue reports use. Every save is
-  audited.
+  document" takes a code (leave it blank for the next free code in the scope,
+  e.g. `PHYS-004`), title, type, scope, version, owner, status, effective and
+  review dates, summary and the controlled text in the same light markup the
+  issue reports use. An **Active** document needs an effective date, and the
+  review date cannot fall before it. Every save is audited; a rejected save
+  returns to the form with what you typed still there.
 - **Edit or delete** — "Edit document" on a row opens the same form in place;
   the delete button removes the record permanently. Prefer marking a superseded
   document **Obsolete** so the history stays readable.
