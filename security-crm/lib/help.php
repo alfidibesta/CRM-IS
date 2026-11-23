@@ -67,6 +67,8 @@ function help_topics(): array
             'steps'   => [
                 'Filter with the type and scope chips, or search by code, title and owner.',
                 'Click a row to expand the document preview and its metadata.',
+                'With document control use "+ New document" to add a policy, SOP or guideline, and "Edit document" on a row to change or delete it.',
+                '"+ New template" opens the form-template form on the Templates page.',
             ],
             'tip' => 'A document whose review falls due within 30 days raises an alert in the bell.',
         ],

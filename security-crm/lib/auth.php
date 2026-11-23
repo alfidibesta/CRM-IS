@@ -32,6 +32,7 @@ function permission_list(): array
         'task.move'      => 'Move cards between columns',
         'task.delete'    => 'Delete tasks',
         'template.edit'  => 'Create / edit / delete templates',
+        'sop.manage'     => 'Create / edit / delete SOP & policy documents',
         'exception.manage' => 'Add / edit / delete exceptions',
         'exception.category' => 'Manage exception categories',
         'file.download'  => 'Read & download issue evidence',
@@ -56,7 +57,7 @@ function role_list(): array
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
-                'task.create', 'task.move', 'task.delete', 'template.edit',
+                'task.create', 'task.move', 'task.delete', 'template.edit', 'sop.manage',
                 'exception.manage', 'exception.category', 'file.download', 'page.audit',
             ],
         ],

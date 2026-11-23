@@ -176,7 +176,7 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
 | Username | Password | Role | Can do |
 | --- | --- | --- | --- |
 | `admin` | `Admin@123` | Administrator | Everything, including users & authority |
-| `manager` | `Manager@123` | Security Manager | Every record + template control |
+| `manager` | `Manager@123` | Security Manager | Every record, templates and the SOP library |
 | `analyst` | `Analyst@123` | Security Analyst | Investigate, upload evidence, move cards |
 | `viewer` | `Viewer@123` | Auditor / Viewer | Read-only: review the registers, audit trail and report exports |
 
@@ -188,7 +188,9 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
 - **Dashboard** — open and overdue counts, issues by category, risk ratings,
   documents due for review, and the six latest audit entries.
 - **SOP & Policy library** — type (Policy / SOP / Guideline), scope, version,
-  owner, status and review date; the controlled text expands inline.
+  owner, status and review date; the controlled text expands inline; document
+  control adds, edits and deletes documents in place and links to the template
+  form.
 - **Workflow board** — five columns, drag and drop with the order saved on drop,
   priority/owner/due date, optional link to an issue.
 - **Issue register and report** — category, severity, tags, search and quick
@@ -273,7 +275,7 @@ and now show their raw action key (for example `cctv.prune`).
 | --- | --- |
 | `?page=login` | Sign-in screen (its own layout, no sidebar) |
 | `?page=dashboard` | Posture at a glance: stats, issues by category, risk ratings, live activity feed, upcoming reviews, template shortcuts |
-| `?page=sop` | SOP & Policy library — filter chips by type / scope / status, search, expandable rows with the controlled text |
+| `?page=sop` | SOP & Policy library — filter chips by type / scope / status, search, expandable rows with the controlled text, create / edit / delete documents (document control), shortcut to add a form template |
 | `?page=workflow` | Kanban board (Backlog → Planned → In Progress → Review → Done), drag & drop saves instantly, delete + link to issue |
 | `?page=issues` | Issue register — category / severity / status / tag filters, tag chips per issue, search, risk score column, quick status change, links to the report |
 | `?page=issue&id=N` | **Full issue report**: details with tags, report form (template + per-report layout), 5×5 risk assessment + heatmap, root cause / actions, persons involved (suspects), evidence upload & download, remediation tasks, activity log, `.docx` export |
@@ -298,6 +300,7 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Create / move tasks | ✓ | ✓ | ✓ | — |
 | Delete tasks | ✓ | ✓ | — | — |
 | Create / edit / delete templates | ✓ | ✓ | — | — |
+| Create / edit / delete SOP & policy documents | ✓ | ✓ | — | — |
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |

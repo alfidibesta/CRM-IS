@@ -149,6 +149,16 @@ date.
 
 - Filter by type and scope chips, or search code, title and owner.
 - Open a row for the preview and the metadata.
+- **Add a document** (`sop.manage`, manager and administrator) — "+ New
+  document" takes a code (generated when left blank), title, type, scope,
+  version, owner, status, effective and review dates, summary and the
+  controlled text in the same light markup the issue reports use. Every save is
+  audited.
+- **Edit or delete** — "Edit document" on a row opens the same form in place;
+  the delete button removes the record permanently. Prefer marking a superseded
+  document **Obsolete** so the history stays readable.
+- **Add a template** — "+ New template" opens the form-template form on the
+  Templates page.
 
 A document whose review date falls within 30 days (or has passed) raises a
 review alert for managers and administrators.

@@ -49,6 +49,9 @@ function audit_actions(): array
         'task.create'  => ['Task created', 'blue'],
         'task.move'    => ['Card moved', 'neutral'],
         'task.delete'  => ['Task deleted', 'red'],
+        'sop.create'   => ['SOP created', 'blue'],
+        'sop.update'   => ['SOP saved', 'blue'],
+        'sop.delete'   => ['SOP deleted', 'red'],
         'template.create' => ['Template created', 'blue'],
         'template.update' => ['Template saved', 'blue'],
         'template.delete' => ['Template deleted', 'red'],
@@ -87,6 +90,7 @@ function audit_entities(): array
         'issue'              => 'Issue',
         'file'               => 'Evidence',
         'task'               => 'Task',
+        'sop'                => 'SOP / policy',
         'template'           => 'Template',
         'exception'          => 'Exception',
         'exception_category' => 'Exception category',
@@ -109,6 +113,8 @@ function audit_record_url(array $row): string
     switch ((string) ($row['entity'] ?? '')) {
         case 'issue':
             return '?page=issue&id=' . $id;
+        case 'sop':
+            return '?page=sop';
         case 'template':
             return '?page=template&id=' . $id;
         case 'user':

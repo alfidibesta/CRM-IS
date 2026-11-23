@@ -147,6 +147,9 @@ function action_permission(string $action): ?string
         'create_task'    => 'task.create',
         'move_task'      => 'task.move',
         'delete_task'    => 'task.delete',
+        'create_sop'     => 'sop.manage',
+        'update_sop'     => 'sop.manage',
+        'delete_sop'     => 'sop.manage',
         'create_template'=> 'template.edit',
         'update_template'=> 'template.edit',
         'delete_template'=> 'template.edit',
@@ -215,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Creation forms carry a one-shot token, so a resubmitted page cannot
     // create the same record twice.
-    if (in_array($action, ['create_issue', 'create_exception', 'create_task', 'create_template', 'create_user'], true)
+    if (in_array($action, ['create_issue', 'create_exception', 'create_task', 'create_template', 'create_sop', 'create_user'], true)
         && !once_check()) {
         flash('That form was already submitted — nothing was created twice.');
         back_to($back, $backId);
@@ -780,6 +783,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             audit('task.delete', 'task', $tid, $taskTitle, 'Removed from the board');
             flash('Task deleted.');
             back_to($back, $backId);
+
+        case 'create_sop':
+            $code  = strtoupper(clamp(preg_replace('/[^A-Za-z0-9._-]/', '', (string) ($_POST['code'] ?? '')) ?? '', 20));
+            $title = clamp($_POST['title'] ?? '', 200);
+            if ($title === '') {
+                $_SESSION['form_error'] = 'A document title is required.';
+                back_to('sop');
+            }
+            if ($code === '') {
+                $code = 'SOP-' . str_pad((string) ((int) $pdo->query('SELECT COUNT(*) FROM sops')->fetchColumn() + 1), 3, '0', STR_PAD_LEFT);
+            }
+            $dup = $pdo->prepare('SELECT id FROM sops WHERE code = ?');
+            $dup->execute([$code]);
+            if ($dup->fetchColumn()) {
+                $_SESSION['form_error'] = "A document with code {$code} already exists.";
+                back_to('sop');
+            }
+
+            $pdo->prepare('INSERT INTO sops (code,title,type,scope,version,owner,status,effective_at,review_at,summary,content)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([
+                    $code,
+                    $title,
+                    in_array($_POST['type'] ?? '', ['Policy', 'SOP', 'Guideline'], true) ? $_POST['type'] : 'SOP',
+                    in_array($_POST['scope'] ?? '', ['Physical', 'IT', 'Strain', 'General'], true) ? $_POST['scope'] : 'General',
+                    clamp($_POST['version'] ?? '1.0', 10) ?: '1.0',
+                    clamp($_POST['owner'] ?? '', 100),
+                    in_array($_POST['status'] ?? '', ['Active', 'Draft', 'In Review', 'Obsolete'], true) ? $_POST['status'] : 'Draft',
+                    date_or($_POST['effective_at'] ?? '', null),
+                    date_or($_POST['review_at'] ?? '', null),
+                    clamp($_POST['summary'] ?? '', 500),
+                    mb_substr((string) ($_POST['content'] ?? ''), 0, 60000),
+                ]);
+            $sid = (int) $pdo->lastInsertId();
+            audit('sop.create', 'sop', $sid, $code, $title);
+            flash("Document {$code} created.");
+            back_to('sop');
+
+        case 'update_sop':
+            $sid = (int) ($_POST['sop_id'] ?? 0);
+            $st  = $pdo->prepare('SELECT code, title FROM sops WHERE id = ?');
+            $st->execute([$sid]);
+            $before = $st->fetch();
+
+            $code  = strtoupper(clamp(preg_replace('/[^A-Za-z0-9._-]/', '', (string) ($_POST['code'] ?? '')) ?? '', 20));
+            $title = clamp($_POST['title'] ?? '', 200);
+
+            if (!$before) {
+                $_SESSION['form_error'] = 'Document not found.';
+                back_to('sop');
+            }
+            if ($code === '' || $title === '') {
+                $_SESSION['form_error'] = 'A document code and title are required.';
+                back_to('sop');
+            }
+            $dup = $pdo->prepare('SELECT id FROM sops WHERE code = ? AND id <> ?');
+            $dup->execute([$code, $sid]);
+            if ($dup->fetchColumn()) {
+                $_SESSION['form_error'] = "Another document already uses the code {$code}.";
+                back_to('sop');
+            }
+
+            $pdo->prepare('UPDATE sops SET code=?, title=?, type=?, scope=?, version=?, owner=?, status=?,
+                                  effective_at=?, review_at=?, summary=?, content=? WHERE id=?')
+                ->execute([
+                    $code,
+                    $title,
+                    in_array($_POST['type'] ?? '', ['Policy', 'SOP', 'Guideline'], true) ? $_POST['type'] : 'SOP',
+                    in_array($_POST['scope'] ?? '', ['Physical', 'IT', 'Strain', 'General'], true) ? $_POST['scope'] : 'General',
+                    clamp($_POST['version'] ?? '1.0', 10) ?: '1.0',
+                    clamp($_POST['owner'] ?? '', 100),
+                    in_array($_POST['status'] ?? '', ['Active', 'Draft', 'In Review', 'Obsolete'], true) ? $_POST['status'] : 'Draft',
+                    date_or($_POST['effective_at'] ?? '', null),
+                    date_or($_POST['review_at'] ?? '', null),
+                    clamp($_POST['summary'] ?? '', 500),
+                    mb_substr((string) ($_POST['content'] ?? ''), 0, 60000),
+                    $sid,
+                ]);
+            audit('sop.update', 'sop', $sid, $code, $title
+                . ((string) $before['code'] !== $code ? ' (was ' . $before['code'] . ')' : ''));
+            flash("Document {$code} saved.");
+            back_to('sop');
+
+        case 'delete_sop':
+            $sid = (int) ($_POST['sop_id'] ?? 0);
+            $st  = $pdo->prepare('SELECT code, title FROM sops WHERE id = ?');
+            $st->execute([$sid]);
+            $gone = $st->fetch();
+            if ($gone) {
+                $pdo->prepare('DELETE FROM sops WHERE id = ?')->execute([$sid]);
+                audit('sop.delete', 'sop', $sid, (string) $gone['code'], (string) $gone['title']);
+                flash('Document deleted.');
+            } else {
+                $_SESSION['form_error'] = 'Document not found.';
+            }
+            back_to('sop');
 
         case 'create_template':
             $code = clamp(strtoupper($_POST['code'] ?? ''), 20);

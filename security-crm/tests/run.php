@@ -282,6 +282,10 @@ foreach (['admin', 'manager', 'analyst'] as $role) {
     ck($role . ' may read persons', in_array('issue.person.read', role_list()[$role]['perms'], true) || in_array('*', role_list()[$role]['perms'], true), true);
     ck($role . ' may download evidence', in_array('file.download', role_list()[$role]['perms'], true) || in_array('*', role_list()[$role]['perms'], true), true);
 }
+ck('document control permission exists', isset(permission_list()['sop.manage']), true);
+ck('manager may manage SOPs', in_array('sop.manage', role_list()['manager']['perms'], true), true);
+ck('analyst may not manage SOPs', in_array('sop.manage', role_list()['analyst']['perms'], true), false);
+ck('viewer may not manage SOPs', in_array('sop.manage', role_list()['viewer']['perms'], true), false);
 ck('viewer may not read persons', in_array('issue.person.read', role_list()['viewer']['perms'], true), false);
 ck('viewer may not download evidence', in_array('file.download', role_list()['viewer']['perms'], true), false);
 
