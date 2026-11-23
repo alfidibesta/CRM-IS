@@ -159,11 +159,23 @@ date.
 - **Edit or delete** — "Edit document" on a row opens the same form in place;
   the delete button removes the record permanently. Prefer marking a superseded
   document **Obsolete** so the history stays readable.
+- **Version history** — every save keeps a full snapshot of the document
+  (all metadata plus the controlled text), the **reason for change** you type,
+  who saved it and when. Open a row and expand *Version history* to read any
+  earlier version. The first snapshot of an existing document is recorded as
+  its baseline, and a save that changes nothing does not create a revision.
+- **Acknowledgement** — on an **Active** document, "I have read vX" records that
+  you have read that exact revision. The **Read** column shows your own state,
+  and for document control the count of active accounts that have read the
+  current revision plus who has not. A new revision resets the count, so an
+  edited policy has to be read again — that is the point of the record.
 - **Add a template** — "+ New template" opens the form-template form on the
   Templates page.
 
 A document whose review date falls within 30 days (or has passed) raises a
-review alert for managers and administrators.
+review alert for managers and administrators. Reading is recorded in the audit
+trail as *Policy acknowledged* with the revision number, so the register and
+the trail agree.
 
 ---
 

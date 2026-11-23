@@ -163,6 +163,7 @@ function action_permission(string $action): ?string
         'create_sop'     => 'sop.manage',
         'update_sop'     => 'sop.manage',
         'delete_sop'     => 'sop.manage',
+        'sop_acknowledge' => 'sop.acknowledge',
         'create_template'=> 'template.edit',
         'update_template'=> 'template.edit',
         'delete_template'=> 'template.edit',
@@ -812,17 +813,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            VALUES (:code,:title,:type,:scope,:version,:owner,:status,:effective_at,:review_at,:summary,:content)')
                 ->execute($fields);
             $sid = (int) $pdo->lastInsertId();
+            sop_save_revision($pdo, $sid, $fields, 'Document created', $u);
             audit('sop.create', 'sop', $sid, (string) $fields['code'], (string) $fields['title']);
             flash("Document {$fields['code']} created.");
             back_to('sop');
 
         case 'update_sop':
             $sid = (int) ($_POST['sop_id'] ?? 0);
-            $st  = $pdo->prepare('SELECT code FROM sops WHERE id = ?');
+            $st  = $pdo->prepare('SELECT * FROM sops WHERE id = ?');
             $st->execute([$sid]);
-            $was = $st->fetchColumn();
+            $was = $st->fetch();
 
             [$fields, $err] = sop_fields($_POST, true);
+            $fields['change_reason'] = sop_change_reason($_POST);
             if ($err !== '') {
                 sop_form_back($err, $fields, $sid);
             }
@@ -830,17 +833,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['form_error'] = 'That document no longer exists; nothing was saved.';
                 back_to('sop');
             }
+            if ($fields['change_reason'] === '') {
+                sop_form_back('Say what changed and why — that sentence is kept in the document history.', $fields, $sid);
+            }
             if (sop_code_taken($pdo, (string) $fields['code'], $sid)) {
                 sop_form_back("Another document already uses the code {$fields['code']}.", $fields, $sid);
             }
 
+            $changed = sop_revision_diff($was, $fields);
+            if (!$changed) {
+                flash("Document {$fields['code']} was already up to date — nothing changed, so no revision was recorded.");
+                back_to('sop');
+            }
+
+            $row = $fields;
+            unset($row['change_reason']);
             $pdo->prepare('UPDATE sops SET code=:code, title=:title, type=:type, scope=:scope, version=:version,
                                   owner=:owner, status=:status, effective_at=:effective_at, review_at=:review_at,
                                   summary=:summary, content=:content WHERE id=:id')
-                ->execute($fields + ['id' => $sid]);
+                ->execute($row + ['id' => $sid]);
+            sop_save_revision($pdo, $sid, $fields, (string) $fields['change_reason'], $u);
             audit('sop.update', 'sop', $sid, (string) $fields['code'], (string) $fields['title']
-                . ((string) $was !== $fields['code'] ? ' (was ' . $was . ')' : ''));
-            flash("Document {$fields['code']} saved.");
+                . ((string) $was['code'] !== $fields['code'] ? ' (was ' . $was['code'] . ')' : '')
+                . ' — ' . implode(', ', $changed) . ': ' . $fields['change_reason']);
+            flash("Document {$fields['code']} saved and version history updated.");
+            back_to('sop');
+
+        case 'sop_acknowledge':
+            $sid = (int) ($_POST['sop_id'] ?? 0);
+            $st  = $pdo->prepare('SELECT id, code, version, status FROM sops WHERE id = ?');
+            $st->execute([$sid]);
+            $doc = $st->fetch();
+            if (!$doc) {
+                $_SESSION['form_error'] = 'That document no longer exists.';
+                back_to('sop');
+            }
+            if ((string) $doc['status'] !== 'Active') {
+                $_SESSION['form_error'] = 'Only an Active document can be acknowledged.';
+                back_to('sop');
+            }
+            $head = (int) (sop_revision_head_ids($pdo)[$sid] ?? 0);
+            if ($head <= 0) {
+                $_SESSION['form_error'] = 'That document has no recorded revision to acknowledge yet.';
+                back_to('sop');
+            }
+            sop_ack_save($pdo, $sid, (int) (current_user()['id'] ?? 0), $head, (string) $doc['version']);
+            audit('sop.acknowledge', 'sop', $sid, (string) $doc['code'],
+                'Acknowledged v' . $doc['version'] . ' (revision ' . $head . ')');
+            flash('Thanks — ' . $doc['code'] . ' v' . $doc['version'] . ' is recorded as read.');
             back_to('sop');
 
         case 'delete_sop':

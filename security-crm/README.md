@@ -190,7 +190,9 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
 - **SOP & Policy library** — type (Policy / SOP / Guideline), scope, version,
   owner, status and review date; the controlled text expands inline; document
   control adds, edits and deletes documents in place and links to the template
-  form.
+  form. Every save keeps a full **version snapshot** with its reason and author,
+  and staff record that they have **read** the current revision, so the library
+  doubles as an awareness record.
 - **Workflow board** — five columns, drag and drop with the order saved on drop,
   priority/owner/due date, optional link to an issue.
 - **Issue register and report** — category, severity, tags, search and quick
@@ -241,6 +243,11 @@ shows the role matrix and manages accounts.
 `SCHEMA_VERSION` in `lib/db.php` bumps once per schema change; `migrate()` only
 adds missing tables, columns and indexes, so an existing database keeps its data.
 
+Build `20261124` adds document control: `sop_revisions` keeps a full snapshot of
+every saved version with its reason and author, and `sop_acknowledgements`
+records who read which revision. Both tables are created on the next request and
+give each existing document a baseline revision; nothing else changes.
+
 This build (`20261122`) adds `prev_hash` and `row_hash` to `audit_log` and seals
 the entries that already exist, once, in id order. It is additive and reversible:
 back up first, because re-sealing recomputes the chain.
@@ -275,7 +282,7 @@ and now show their raw action key (for example `cctv.prune`).
 | --- | --- |
 | `?page=login` | Sign-in screen (its own layout, no sidebar) |
 | `?page=dashboard` | Posture at a glance: stats, issues by category, risk ratings, live activity feed, upcoming reviews, template shortcuts |
-| `?page=sop` | SOP & Policy library — filter chips by type / scope / status, search, expandable rows with the controlled text, create / edit / delete documents (document control), shortcut to add a form template |
+| `?page=sop` | SOP & Policy library — filter chips by type / scope / status, search, expandable rows with the controlled text and version history, create / edit / delete documents (document control), "I have read" acknowledgement with coverage per revision, shortcut to add a form template |
 | `?page=workflow` | Kanban board (Backlog → Planned → In Progress → Review → Done), drag & drop saves instantly, delete + link to issue |
 | `?page=issues` | Issue register — category / severity / status / tag filters, tag chips per issue, search, risk score column, quick status change, links to the report |
 | `?page=issue&id=N` | **Full issue report**: details with tags, report form (template + per-report layout), 5×5 risk assessment + heatmap, root cause / actions, persons involved (suspects), evidence upload & download, remediation tasks, activity log, `.docx` export |
@@ -301,6 +308,8 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Delete tasks | ✓ | ✓ | — | — |
 | Create / edit / delete templates | ✓ | ✓ | — | — |
 | Create / edit / delete SOP & policy documents | ✓ | ✓ | — | — |
+| Acknowledge reading a policy or SOP | ✓ | ✓ | ✓ | ✓ |
+| See who has read a document revision | ✓ | ✓ | — | — |
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |
@@ -423,6 +432,7 @@ lib/notify.php       alert rules: assignment, critical, due, expiring, review
 lib/templates.php     template markup -> HTML blocks
 lib/word.php         OOXML (.docx) writer + ZIP encoder
 lib/report.php        risk scoring, report-form binding, issue report .docx blocks
+lib/sops.php          document control: validation, code allocation, revisions, acknowledgement
 views/               header, footer, login and one file per page
 assets/app.css       design tokens + all styling (red / blue / orange accents)
 assets/app.js        drag & drop, delete confirms, dropzone, live risk score
@@ -578,7 +588,7 @@ gzip on;
 ### Tests
 
 ```bash
-php tests/run.php            # 100 unit checks: tags, risk, clamping, dates, parsing,
+php tests/run.php            # unit checks: tags, risk, clamping, dates, parsing,
                              # client IP, audit + hash chain, notifications, router ↔ permission wiring
 php tests/verify-audit.php   # live check: walks audit_log and names the first broken link
 ```

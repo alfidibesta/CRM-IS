@@ -2,7 +2,7 @@
 -- Generated from a freshly seeded install. The app also creates and upgrades
 -- every table by itself on the first request, so importing this file is optional.
 --
--- Tables: audit_log, exceptions, exception_categories, issues, issue_events, issue_files, login_attempts, notifications, schema_meta, sops, suspects, tasks, templates, users
+-- Tables: audit_log, exceptions, exception_categories, issues, issue_events, issue_files, login_attempts, notifications, schema_meta, sop_acknowledgements, sop_revisions, sops, suspects, tasks, templates, users
 -- Demo sign-in: admin / Admin@123 (see README.md for the other roles).
 
 CREATE DATABASE IF NOT EXISTS `security_crm` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -316,5 +316,49 @@ CREATE TABLE `users` (
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
+/*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */
+
+-- Document control (build 20261124): controlled-document history and policy
+-- acknowledgement. The app creates both tables itself; this block is for a
+-- manual import of a fresh database.
+DROP TABLE IF EXISTS `sop_acknowledgements`;
+CREATE TABLE `sop_acknowledgements` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `sop_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `revision_id` int(11) NOT NULL,
+  `version` varchar(10) NOT NULL DEFAULT '',
+  `acknowledged_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_sop_ack` (`sop_id`,`user_id`),
+  KEY `idx_sop_ack_user` (`user_id`),
+  KEY `idx_sop_ack_revision` (`revision_id`),
+  CONSTRAINT `fk_sopack_sop` FOREIGN KEY (`sop_id`) REFERENCES `sops` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_sopack_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `sop_revisions`;
+CREATE TABLE `sop_revisions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `sop_id` int(11) NOT NULL,
+  `revision_no` int(11) NOT NULL,
+  `code` varchar(20) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `type` enum('Policy','SOP','Guideline') NOT NULL DEFAULT 'SOP',
+  `scope` enum('Physical','IT','Strain','General') NOT NULL DEFAULT 'General',
+  `version` varchar(10) NOT NULL DEFAULT '1.0',
+  `owner` varchar(100) NOT NULL DEFAULT '',
+  `status` enum('Active','Draft','In Review','Obsolete') NOT NULL DEFAULT 'Draft',
+  `effective_at` date DEFAULT NULL,
+  `review_at` date DEFAULT NULL,
+  `summary` varchar(500) NOT NULL DEFAULT '',
+  `content` text DEFAULT NULL,
+  `change_reason` varchar(300) NOT NULL DEFAULT '',
+  `changed_by` varchar(100) NOT NULL DEFAULT '',
+  `changed_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_sop_revision` (`sop_id`,`revision_no`),
+  CONSTRAINT `fk_soprev_sop` FOREIGN KEY (`sop_id`) REFERENCES `sops` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+;
 

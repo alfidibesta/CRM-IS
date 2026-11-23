@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261123;
+const SCHEMA_VERSION = 20261124;
 
 function db(array $cfg): PDO
 {
@@ -79,6 +79,28 @@ CREATE TABLE IF NOT EXISTS sops (
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_sops_review (review_at),
     INDEX idx_sops_type_status (type, status)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sop_revisions (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    sop_id        INT NOT NULL,
+    revision_no   INT NOT NULL,
+    code          VARCHAR(20)  NOT NULL,
+    title         VARCHAR(200) NOT NULL,
+    type          ENUM('Policy','SOP','Guideline') NOT NULL DEFAULT 'SOP',
+    scope         ENUM('Physical','IT','Strain','General') NOT NULL DEFAULT 'General',
+    version       VARCHAR(10)  NOT NULL DEFAULT '1.0',
+    owner         VARCHAR(100) NOT NULL DEFAULT '',
+    status        ENUM('Active','Draft','In Review','Obsolete') NOT NULL DEFAULT 'Draft',
+    effective_at  DATE NULL,
+    review_at     DATE NULL,
+    summary       VARCHAR(500) NOT NULL DEFAULT '',
+    content       TEXT NULL,
+    change_reason VARCHAR(300) NOT NULL DEFAULT '',
+    changed_by    VARCHAR(100) NOT NULL DEFAULT '',
+    changed_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_sop_revision (sop_id, revision_no),
+    CONSTRAINT fk_soprev_sop FOREIGN KEY (sop_id) REFERENCES sops (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -147,6 +169,22 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until    DATETIME NULL,
     last_login      DATETIME NULL,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- Defined after `users` because both foreign keys point at tables that must
+-- already exist when InnoDB creates it.
+CREATE TABLE IF NOT EXISTS sop_acknowledgements (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    sop_id          INT NOT NULL,
+    user_id         INT NOT NULL,
+    revision_id     INT NOT NULL,
+    version         VARCHAR(10) NOT NULL DEFAULT '',
+    acknowledged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_sop_ack (sop_id, user_id),
+    KEY idx_sop_ack_user (user_id),
+    KEY idx_sop_ack_revision (revision_id),
+    CONSTRAINT fk_sopack_sop FOREIGN KEY (sop_id) REFERENCES sops (id) ON DELETE CASCADE,
+    CONSTRAINT fk_sopack_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -341,6 +379,12 @@ SQL;
     ]);
     if (function_exists('audit_seal_pending')) {
         audit_seal_pending($pdo);
+    }
+
+    // Document control (20261124): give every document that predates the
+    // history a baseline revision, so its first edit is revision 2 onward.
+    if (function_exists('sop_backfill_revisions')) {
+        sop_backfill_revisions($pdo);
     }
 }
 
@@ -547,6 +591,12 @@ function seed_sops(PDO $pdo): void
     $st = $pdo->prepare('INSERT INTO sops (code,title,type,scope,version,owner,status,effective_at,review_at,summary,content) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
     foreach ($sops as $s) {
         $st->execute($s);
+    }
+
+    // Seeded documents get their baseline revision too, so history and
+    // acknowledgement work on a fresh install without a second migration.
+    if (function_exists('sop_backfill_revisions')) {
+        sop_backfill_revisions($pdo);
     }
 }
 

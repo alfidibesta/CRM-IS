@@ -86,3 +86,219 @@ function sop_code_taken(PDO $pdo, string $code, int $exceptId = 0): bool
     $st->execute([$code, $exceptId]);
     return (bool) $st->fetchColumn();
 }
+
+/* ------------------------------------------- revision history (document control) */
+
+/** Longest "reason for change" a revision stores. */
+const SOP_CHANGE_REASON_MAX = 300;
+
+/** Revisions one document shows on the library before the list is cut. */
+const SOP_HISTORY_LIMIT = 20;
+
+/** The sentence an editor gives for a save; required on update. */
+function sop_change_reason(array $post): string
+{
+    return clamp($post['change_reason'] ?? '', SOP_CHANGE_REASON_MAX);
+}
+
+/** The controlled fields a revision snapshots, in register order: key => label. */
+function sop_revision_fields(): array
+{
+    return [
+        'code'         => 'Code',
+        'title'        => 'Title',
+        'type'         => 'Type',
+        'scope'        => 'Scope',
+        'version'      => 'Version',
+        'owner'        => 'Owner',
+        'status'       => 'Status',
+        'effective_at' => 'Effective date',
+        'review_at'    => 'Next review',
+        'summary'      => 'Summary',
+        'content'      => 'Controlled text',
+    ];
+}
+
+/**
+ * Which controlled fields differ between two snapshots, as labels.
+ * NULL and '' compare equal, so a cleared date is not reported as a change
+ * when it was never set.
+ *
+ * @return list<string>
+ */
+function sop_revision_diff(array $before, array $after): array
+{
+    $changed = [];
+    foreach (sop_revision_fields() as $key => $label) {
+        if ((string) ($before[$key] ?? '') !== (string) ($after[$key] ?? '')) {
+            $changed[] = $label;
+        }
+    }
+
+    return $changed;
+}
+
+/** Next revision number for a document. */
+function sop_next_revision_no(PDO $pdo, int $sopId): int
+{
+    $st = $pdo->prepare('SELECT COALESCE(MAX(revision_no), 0) FROM sop_revisions WHERE sop_id = ?');
+    $st->execute([$sopId]);
+
+    return (int) $st->fetchColumn() + 1;
+}
+
+/**
+ * Store one snapshot of a document as it now stands.
+ *
+ * Returns the new revision id. The unique key on (sop_id, revision_no) keeps
+ * two simultaneous saves from sharing a number.
+ */
+function sop_save_revision(PDO $pdo, int $sopId, array $row, string $reason, string $by): int
+{
+    $pdo->prepare('INSERT INTO sop_revisions
+            (sop_id, revision_no, code, title, type, scope, version, owner, status,
+             effective_at, review_at, summary, content, change_reason, changed_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([
+            $sopId,
+            sop_next_revision_no($pdo, $sopId),
+            (string) $row['code'],
+            (string) $row['title'],
+            (string) $row['type'],
+            (string) $row['scope'],
+            (string) $row['version'],
+            (string) $row['owner'],
+            (string) $row['status'],
+            $row['effective_at'] ?? null,
+            $row['review_at'] ?? null,
+            (string) ($row['summary'] ?? ''),
+            (string) ($row['content'] ?? ''),
+            clamp($reason, SOP_CHANGE_REASON_MAX),
+            clamp($by, 100),
+        ]);
+
+    return (int) $pdo->lastInsertId();
+}
+
+/** Latest revision id of every document: sop_id => revision id. */
+function sop_revision_head_ids(PDO $pdo): array
+{
+    $heads = [];
+    foreach ($pdo->query('SELECT sop_id, MAX(id) AS head FROM sop_revisions GROUP BY sop_id') as $r) {
+        $heads[(int) $r['sop_id']] = (int) $r['head'];
+    }
+
+    return $heads;
+}
+
+/** Revisions of several documents, newest first per document. */
+function sop_revision_lists(PDO $pdo, array $sopIds): array
+{
+    $sopIds = array_values(array_filter(array_map('intval', $sopIds)));
+    if (!$sopIds) {
+        return [];
+    }
+    $in = implode(',', array_fill(0, count($sopIds), '?'));
+    $st = $pdo->prepare("SELECT * FROM sop_revisions WHERE sop_id IN ($in)
+                         ORDER BY sop_id, revision_no DESC");
+    $st->execute($sopIds);
+
+    $out = [];
+    foreach ($st->fetchAll() as $row) {
+        $id = (int) $row['sop_id'];
+        if (count($out[$id] ?? []) < SOP_HISTORY_LIMIT) {
+            $out[$id][] = $row;
+        }
+    }
+
+    return $out;
+}
+
+/** Give every document without a history a baseline revision (idempotent). */
+function sop_backfill_revisions(PDO $pdo): int
+{
+    return $pdo->exec("INSERT INTO sop_revisions
+            (sop_id, revision_no, code, title, type, scope, version, owner, status,
+             effective_at, review_at, summary, content, change_reason, changed_by, changed_at)
+         SELECT s.id, 1, s.code, s.title, s.type, s.scope, s.version, s.owner, s.status,
+                s.effective_at, s.review_at, s.summary, s.content,
+                'Baseline recorded when version history was enabled', 'system', s.created_at
+           FROM sops s
+          WHERE NOT EXISTS (SELECT 1 FROM sop_revisions r WHERE r.sop_id = s.id)");
+}
+
+/* ----------------------------------------------- policy acknowledgement */
+
+/** Every acknowledgement, keyed by document: sop_id => list of rows. */
+function sop_ack_map(PDO $pdo): array
+{
+    $out = [];
+    $sql = 'SELECT a.sop_id, a.user_id, a.revision_id, a.version, a.acknowledged_at
+              FROM sop_acknowledgements a
+              JOIN users u ON u.id = a.user_id
+             ORDER BY a.acknowledged_at DESC';
+    foreach ($pdo->query($sql) as $row) {
+        $out[(int) $row['sop_id']][] = $row;
+    }
+
+    return $out;
+}
+
+/**
+ * Whether this user has read the current revision of a document.
+ *
+ * @return array{acked: bool, at: string, revision_id: int}
+ */
+function sop_ack_state(array $rows, int $userId, int $headRev): array
+{
+    foreach ($rows as $row) {
+        if ((int) $row['user_id'] === $userId) {
+            return [
+                'acked'       => $headRev > 0 && (int) $row['revision_id'] === $headRev,
+                'at'          => (string) $row['acknowledged_at'],
+                'revision_id' => (int) $row['revision_id'],
+            ];
+        }
+    }
+
+    return ['acked' => false, 'at' => '', 'revision_id' => 0];
+}
+
+/**
+ * How much of the active workforce has read one revision.
+ *
+ * @param list<int> $activeUserIds
+ * @return array{read: int, total: int, outstanding: list<int>}
+ */
+function sop_ack_coverage(array $rows, array $activeUserIds, int $headRev): array
+{
+    $atHead = [];
+    foreach ($rows as $row) {
+        if ($headRev > 0 && (int) $row['revision_id'] === $headRev) {
+            $atHead[(int) $row['user_id']] = true;
+        }
+    }
+
+    $read = 0;
+    $outstanding = [];
+    foreach ($activeUserIds as $id) {
+        if (isset($atHead[(int) $id])) {
+            $read++;
+        } else {
+            $outstanding[] = (int) $id;
+        }
+    }
+
+    return ['read' => $read, 'total' => count($activeUserIds), 'outstanding' => $outstanding];
+}
+
+/** Record (or refresh) this user's reading of the current revision. */
+function sop_ack_save(PDO $pdo, int $sopId, int $userId, int $revId, string $version): void
+{
+    $pdo->prepare('INSERT INTO sop_acknowledgements (sop_id, user_id, revision_id, version, acknowledged_at)
+                   VALUES (?,?,?,?,NOW())
+                   ON DUPLICATE KEY UPDATE revision_id = VALUES(revision_id),
+                                           version = VALUES(version),
+                                           acknowledged_at = VALUES(acknowledged_at)')
+        ->execute([$sopId, $userId, $revId, clamp($version, 10)]);
+}

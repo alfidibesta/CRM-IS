@@ -1223,3 +1223,12 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   max-height: 520px; overflow: auto;
 }
 .nav__dot--neutral { background: var(--ink-3); }
+
+/* Document control: version history and reading acknowledgement */
+.ack { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.revs { margin-top: 8px; }
+.rev { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
+.rev:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.rev__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+.rev > details { margin-top: 3px; }
+.rev > details > summary { display: inline-block; cursor: pointer; }

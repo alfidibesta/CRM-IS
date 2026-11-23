@@ -33,6 +33,7 @@ function permission_list(): array
         'task.delete'    => 'Delete tasks',
         'template.edit'  => 'Create / edit / delete templates',
         'sop.manage'     => 'Create / edit / delete SOP & policy documents',
+        'sop.acknowledge' => 'Acknowledge reading a policy or SOP',
         'exception.manage' => 'Add / edit / delete exceptions',
         'exception.category' => 'Manage exception categories',
         'file.download'  => 'Read & download issue evidence',
@@ -57,7 +58,7 @@ function role_list(): array
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
-                'task.create', 'task.move', 'task.delete', 'template.edit', 'sop.manage',
+                'task.create', 'task.move', 'task.delete', 'template.edit', 'sop.manage', 'sop.acknowledge',
                 'exception.manage', 'exception.category', 'file.download', 'page.audit',
             ],
         ],
@@ -67,7 +68,7 @@ function role_list(): array
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
-                'page.exceptions', 'exception.manage',
+                'page.exceptions', 'exception.manage', 'sop.acknowledge',
                 'task.create', 'task.move', 'file.download',
             ],
         ],
@@ -76,7 +77,7 @@ function role_list(): array
             'hint'  => 'Read-only: review the registers, the audit trail and exports',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
-                'page.exceptions', 'issue.export', 'page.audit',
+                'page.exceptions', 'issue.export', 'page.audit', 'sop.acknowledge',
             ],
         ],
     ];

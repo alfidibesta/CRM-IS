@@ -314,6 +314,43 @@ ck('sop code prefixes follow the register',
     [sop_code_prefix('Physical'), sop_code_prefix('IT'), sop_code_prefix('Strain'), sop_code_prefix('General')],
     ['PHYS', 'IT', 'STRAIN', 'GEN']);
 
+/* --------------------------------------- document history + acknowledgement */
+
+ck('revision snapshots every controlled field', array_keys(sop_revision_fields()),
+    ['code', 'title', 'type', 'scope', 'version', 'owner', 'status', 'effective_at', 'review_at', 'summary', 'content']);
+
+$revBefore = ['code' => 'IT-001', 'title' => 'A', 'status' => 'Draft', 'content' => 'x', 'effective_at' => null];
+$revAfter  = ['code' => 'IT-001', 'title' => 'A', 'status' => 'Active', 'content' => 'x', 'effective_at' => '2026-01-01'];
+ck('revision diff names the fields that changed', sop_revision_diff($revBefore, $revAfter), ['Status', 'Effective date']);
+ck('revision diff of an identical row is empty', sop_revision_diff($revBefore, $revBefore), []);
+ck('revision diff treats null and empty alike', sop_revision_diff(['summary' => null], ['summary' => '']), []);
+ck('revision diff sees a changed body', sop_revision_diff(['content' => 'a'], ['content' => 'b']), ['Controlled text']);
+ck('change reason is trimmed', sop_change_reason(['change_reason' => '  Annual review  ']), 'Annual review');
+ck('change reason is clamped', strlen(sop_change_reason(['change_reason' => str_repeat('x', 400)])), SOP_CHANGE_REASON_MAX);
+ck('change reason defaults to empty', sop_change_reason([]), '');
+
+$ackRows = [
+    ['user_id' => '1', 'revision_id' => '5', 'acknowledged_at' => '2026-11-01 09:00:00'],
+    ['user_id' => '2', 'revision_id' => '4', 'acknowledged_at' => '2026-10-01 09:00:00'],
+];
+ck('ack state: reader at the head revision', sop_ack_state($ackRows, 1, 5)['acked'], true);
+ck('ack state: reader of an older revision is outstanding again', sop_ack_state($ackRows, 2, 5)['acked'], false);
+ck('ack state: never read', sop_ack_state($ackRows, 3, 5)['acked'], false);
+ck('ack state keeps the reading date', sop_ack_state($ackRows, 1, 5)['at'], '2026-11-01 09:00:00');
+ck('ack state without a revision', sop_ack_state([], 1, 0)['acked'], false);
+ck('ack coverage counts active accounts at the head revision', sop_ack_coverage($ackRows, [1, 2, 3], 5),
+    ['read' => 1, 'total' => 3, 'outstanding' => [2, 3]]);
+ck('ack coverage ignores a disabled account', sop_ack_coverage($ackRows, [2], 5)['read'], 0);
+ck('ack coverage with nobody active', sop_ack_coverage($ackRows, [], 5), ['read' => 0, 'total' => 0, 'outstanding' => []]);
+ck('ack coverage with everyone read', sop_ack_coverage($ackRows, [1], 5)['outstanding'], []);
+
+ck('acknowledge permission exists', isset(permission_list()['sop.acknowledge']), true);
+foreach (['admin', 'manager', 'analyst', 'viewer'] as $role) {
+    ck($role . ' may acknowledge a policy', in_array('sop.acknowledge', role_list()[$role]['perms'], true) || in_array('*', role_list()[$role]['perms'], true), true);
+}
+ck('acknowledging does not imply document control', in_array('sop.manage', role_list()['viewer']['perms'], true), false);
+ck('policy acknowledgement is a labelled audit event', audit_action_label('sop.acknowledge'), 'Policy acknowledged');
+
 /* -------------------------------------------------------------- client IP */
 
 ck('cidr /8 matches', ip_matches_cidr('10.120.10.10', '10.0.0.0/8'), true);

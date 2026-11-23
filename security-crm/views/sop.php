@@ -67,6 +67,16 @@ $sopStats = [
     'review'   => (int) ($byStatus['In Review'] ?? 0),
     'obsolete' => (int) ($byStatus['Obsolete'] ?? 0),
 ];
+
+// Document control: revision history and who has read the current one.
+$me          = (int) (current_user()['id'] ?? 0);
+$heads       = sop_revision_head_ids($pdo);
+$ackRows     = sop_ack_map($pdo);
+$activeUsers = $pdo->query('SELECT id, name FROM users WHERE active = 1 ORDER BY name')->fetchAll();
+$activeIds   = array_map('intval', array_column($activeUsers, 'id'));
+$userNames   = array_column($activeUsers, 'name', 'id');
+$history     = sop_revision_lists($pdo, array_column($rows, 'id'));
+$canAck      = can('sop.acknowledge');
 ?>
 
 <section class="grid grid--stats">
@@ -160,6 +170,9 @@ $sopStats = [
         <label class="field"><span>Effective</span><input type="date" name="effective_at" value="<?= e($sopVal('effective_at')) ?>"></label>
         <label class="field"><span>Next review</span><input type="date" name="review_at" value="<?= e($sopVal('review_at')) ?>"></label>
         <label class="field field--wide"><span>Summary</span><input type="text" name="summary" maxlength="500" value="<?= e($sopVal('summary')) ?>" placeholder="One line shown in the register"></label>
+        <?php if ($edit): ?>
+          <label class="field field--wide"><span>Reason for this change *</span><input type="text" name="change_reason" required maxlength="300" value="<?= e($sopVal('change_reason')) ?>" placeholder="e.g. Annual review; access rules tightened after the audit"></label>
+        <?php endif; ?>
         <label class="field field--wide"><span>Controlled text</span>
           <textarea name="content" rows="8" placeholder="# Heading&#10;## Section&#10;- bullet&#10;1. numbered&#10;| Header | Header |&#10;| cell   | cell   |"><?= e($sopVal('content')) ?></textarea>
         </label>
@@ -168,7 +181,7 @@ $sopStats = [
       <div class="form__actions">
         <button type="submit" class="btn btn--primary btn--sm"><?= $edit ? 'Save document' : 'Create document' ?></button>
         <?php if ($edit): ?><a class="btn btn--ghost btn--sm" href="?page=sop">Cancel</a><?php endif; ?>
-        <span class="muted">Every save is audited. Mark a superseded document Obsolete rather than deleting it.</span>
+        <span class="muted">Every save is audited and kept as a version. A save resets acknowledgements, so readers are asked to re-read it. Mark a superseded document Obsolete rather than deleting it.</span>
       </div>
     </form>
 
@@ -198,10 +211,20 @@ $sopStats = [
         <th>Effective</th>
         <th>Next review</th>
         <th>Status</th>
+        <th>Read</th>
       </tr>
     </thead>
     <tbody>
     <?php foreach ($rows as $i => $r): ?>
+      <?php
+        $docId   = (int) $r['id'];
+        $headRev = (int) ($heads[$docId] ?? 0);
+        $docAcks = $ackRows[$docId] ?? [];
+        $myAck   = sop_ack_state($docAcks, $me, $headRev);
+        $cover   = sop_ack_coverage($docAcks, $activeIds, $headRev);
+        $revs    = $history[$docId] ?? [];
+        $isLive  = (string) $r['status'] === 'Active';
+      ?>
       <tr class="row">
         <td class="num"><?= $i + 1 ?></td>
         <td class="mono"><?= e($r['code']) ?></td>
@@ -229,6 +252,61 @@ $sopStats = [
               <?php else: ?>
                 <p class="muted">No controlled text stored for this document — the summary above is the record.</p>
               <?php endif; ?>
+
+              <div class="ack">
+                <?php if (!$isLive): ?>
+                  <p class="footnote">Reading is recorded once this document is <strong>Active</strong>.</p>
+                <?php elseif ($myAck['acked']): ?>
+                  <p class="footnote">✓ You recorded reading v<?= e((string) $r['version']) ?> on <?= e(fmt_date(substr($myAck['at'], 0, 10))) ?><?php if ($cover['total'] > 0): ?> · <?= $cover['read'] ?> of <?= $cover['total'] ?> active accounts have read this revision<?php endif; ?>.</p>
+                <?php elseif ($canAck): ?>
+                  <form class="inline-form" method="post" action="index.php">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="sop_acknowledge">
+                    <input type="hidden" name="back" value="sop">
+                    <input type="hidden" name="sop_id" value="<?= $docId ?>">
+                    <button type="submit" class="btn btn--ghost btn--sm">I have read v<?= e((string) $r['version']) ?></button>
+                    <?php if ($cover['total'] > 0): ?><span class="footnote"><?= $cover['read'] ?> of <?= $cover['total'] ?> active accounts have read this revision</span><?php endif; ?>
+                  </form>
+                <?php endif; ?>
+                <?php if ($canManage && $isLive && $cover['outstanding']): ?>
+                  <p class="footnote">Not yet read: <?= e(implode(', ', array_map(static fn(int $id): string => (string) ($userNames[$id] ?? ('#' . $id)), array_slice($cover['outstanding'], 0, 5)))) ?><?= count($cover['outstanding']) > 5 ? ' and ' . (count($cover['outstanding']) - 5) . ' more' : '' ?>.</p>
+                <?php endif; ?>
+              </div>
+
+              <?php if ($revs): ?>
+                <details class="panel--sub">
+                  <summary class="detail--inline">Version history (<?= count($revs) ?>)</summary>
+                  <div class="revs">
+                    <?php foreach ($revs as $n => $rv): ?>
+                      <?php
+                        $older = $revs[$n + 1] ?? null;
+                        $diff  = $older ? sop_revision_diff($older, $rv) : [];
+                      ?>
+                      <article class="rev">
+                        <p class="rev__head">
+                          <strong>v<?= e((string) $rv['version']) ?></strong>
+                          <?= badge((string) $rv['status'], status_tone((string) $rv['status'])) ?>
+                          <span class="muted">revision <?= (int) $rv['revision_no'] ?> · <?= e(fmt_date(substr((string) $rv['changed_at'], 0, 10))) ?> · <?= e((string) $rv['changed_by']) ?></span>
+                        </p>
+                        <p class="footnote"><?= e((string) $rv['change_reason']) ?></p>
+                        <p class="footnote"><?= $older ? ($diff ? 'Changed: ' . e(implode(', ', $diff)) : 'No field changed') : 'First recorded version' ?></p>
+                        <details>
+                          <summary class="btn btn--ghost btn--xs">Read this version</summary>
+                          <div class="detail__body">
+                            <p><strong><?= e((string) $rv['title']) ?></strong></p>
+                            <?php if ((string) $rv['summary'] !== ''): ?><p class="muted"><?= e((string) $rv['summary']) ?></p><?php endif; ?>
+                            <?php if (trim((string) $rv['content']) !== ''): ?>
+                              <div class="doc doc--sop"><?= blocks_to_html(parse_template_body((string) $rv['content'])) ?></div>
+                            <?php else: ?>
+                              <p class="muted">This version had no controlled text.</p>
+                            <?php endif; ?>
+                          </div>
+                        </details>
+                      </article>
+                    <?php endforeach; ?>
+                  </div>
+                </details>
+              <?php endif; ?>
             </div>
           </details>
         </td>
@@ -239,10 +317,22 @@ $sopStats = [
         <td class="nowrap"><?= fmt_date($r['effective_at']) ?></td>
         <td class="nowrap"><?= fmt_date($r['review_at']) ?></td>
         <td><?= badge($r['status'], status_tone($r['status'])) ?></td>
+        <td class="nowrap">
+          <?php if ($canManage): ?>
+            <span title="Active accounts that have read this revision"><?= $cover['read'] ?>/<?= $cover['total'] ?></span>
+            <?php if ($myAck['acked']): ?><span class="badge badge--green">you</span><?php endif; ?>
+          <?php elseif ($myAck['acked']): ?>
+            <span class="badge badge--green">Read</span>
+          <?php elseif ($isLive): ?>
+            <span class="badge badge--neutral">Unread</span>
+          <?php else: ?>
+            <span class="muted">—</span>
+          <?php endif; ?>
+        </td>
       </tr>
     <?php endforeach; ?>
     <?php if (!$rows): ?>
-      <tr><td colspan="10" class="empty">No documents match this filter.</td></tr>
+      <tr><td colspan="11" class="empty">No documents match this filter.</td></tr>
     <?php endif; ?>
     </tbody>
   </table>

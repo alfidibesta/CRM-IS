@@ -52,6 +52,7 @@ function audit_actions(): array
         'sop.create'   => ['SOP created', 'blue'],
         'sop.update'   => ['SOP saved', 'blue'],
         'sop.delete'   => ['SOP deleted', 'red'],
+        'sop.acknowledge' => ['Policy acknowledged', 'green'],
         'template.create' => ['Template created', 'blue'],
         'template.update' => ['Template saved', 'blue'],
         'template.delete' => ['Template deleted', 'red'],
