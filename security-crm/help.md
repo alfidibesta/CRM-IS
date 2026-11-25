@@ -215,6 +215,13 @@ websites, cameras, and so on).
 - **Exception categories** at the bottom of the page maintain the category list
   used by the register; renaming a category carries its exceptions with it, and
   a category in use cannot be deleted.
+- **Renew** (`exception.renew`, managers and administrators) extends the period
+  properly: the new end date, the reason, the approver and the moment are
+  recorded, and the previous end date stays in the audit trail. A routine edit
+  cannot move the period end.
+- **Verify the compensating control** records the date, a note on what was
+  checked and who checked it. A renewal run right after a verification click
+  leaves the auditor with both halves of the story.
 - **Coverage by category** and the expiry list show where the register is thin
   and what is about to lapse.
 

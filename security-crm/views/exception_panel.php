@@ -78,7 +78,8 @@ if (!$e) {
     exit('<p class="muted">That exception no longer exists.</p>');
 }
 
-$cats = exception_categories($pdo);
+$cats     = exception_categories($pdo);
+$canRenew = can('exception.renew');
 ?>
 
 <form class="form form--sub" method="post" action="index.php">
@@ -110,9 +111,10 @@ $cats = exception_categories($pdo);
     <label class="field"><span>Period start</span>
       <input type="date" name="period_start" value="<?= e($e['period_start']) ?>">
     </label>
-    <label class="field"><span>Period end</span>
-      <input type="date" name="period_end" value="<?= e($e['period_end']) ?>">
-    </label>
+    <div class="field"><span>Period end</span>
+      <p class="mono"><?= fmt_date($e['period_end']) ?></p>
+      <span class="muted">Moves only through a renewal, so the approval is recorded.</span>
+    </div>
     <label class="field"><span>Risk level</span>
       <select name="risk_level">
         <?php foreach (['High', 'Medium', 'Low'] as $s): ?>
@@ -144,6 +146,63 @@ $cats = exception_categories($pdo);
     <span class="muted"><?= e($e['code']) ?> · updated <?= fmt_date($e['updated_at']) ?></span>
   </div>
 </form>
+
+<?php if ($canRenew): ?>
+<details class="panel panel--sub">
+  <summary class="btn btn--ghost btn--summary btn--sm">Renew the period</summary>
+  <form class="form form--sub" method="post" action="index.php">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="renew_exception">
+    <input type="hidden" name="back" value="exceptions">
+    <input type="hidden" name="exception_id" value="<?= (int) $e['id'] ?>">
+    <div class="form__grid">
+      <label class="field"><span>New period end *</span>
+        <input type="date" name="period_end" required min="<?= date('Y-m-d', strtotime('+1 day')) ?>"
+               value="<?= $e['period_end'] ? e(date('Y-m-d', strtotime((string) $e['period_end'] . ' +1 year'))) : e(date('Y-m-d', strtotime('+90 days'))) ?>">
+      </label>
+      <label class="field field--wide"><span>Reason for the extension *</span>
+        <input type="text" name="renewal_note" required maxlength="255"
+               placeholder="e.g. supplier migration slips a quarter; the control still runs">
+      </label>
+    </div>
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary btn--sm">Record renewal</button>
+      <span class="muted">Records you as the approver with today's date and returns the status to Active; the previous end date stays in the audit trail.</span>
+    </div>
+  </form>
+</details>
+
+<details class="panel panel--sub">
+  <summary class="btn btn--ghost btn--summary btn--sm">Verify the compensating control</summary>
+  <form class="form form--sub" method="post" action="index.php">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="verify_exception_control">
+    <input type="hidden" name="back" value="exceptions">
+    <input type="hidden" name="exception_id" value="<?= (int) $e['id'] ?>">
+    <div class="form__grid">
+      <label class="field"><span>Verified on *</span>
+        <input type="date" name="verified_on" required max="<?= date('Y-m-d') ?>" value="<?= date('Y-m-d') ?>">
+      </label>
+      <label class="field field--wide"><span>What was checked *</span>
+        <input type="text" name="verification_note" required maxlength="255"
+               placeholder="e.g. 12 scans logged on the AV station, no exceptions">
+      </label>
+    </div>
+    <div class="form__actions">
+      <button type="submit" class="btn btn--primary btn--sm">Record verification</button>
+      <span class="muted">
+        <?php if (trim((string) $e['control']) === ''): ?>
+          Record the compensating control on the form above first.
+        <?php else: ?>
+          Control in force: <?= e($e['control']) ?>
+        <?php endif; ?>
+      </span>
+    </div>
+  </form>
+</details>
+<?php else: ?>
+<p class="muted">Renewing the period and verifying the compensating control are for managers and administrators.</p>
+<?php endif; ?>
 
 <form class="inline-form inline-form--danger" method="post" action="index.php"
       data-confirm="Delete <?= e($e['code']) ?> permanently?">

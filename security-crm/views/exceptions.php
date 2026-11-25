@@ -224,7 +224,8 @@ function exc_url(array $over): string
             <span class="cell-issue__sub mono"><?= e($e['target']) ?></span>
           <?php endif; ?>
 
-          <?php if (trim((string) $e['detail']) !== '' || trim((string) $e['justification']) !== '' || trim((string) $e['control']) !== ''): ?>
+          <?php if (trim((string) $e['detail']) !== '' || trim((string) $e['justification']) !== '' || trim((string) $e['control']) !== ''
+                    || !empty($e['renewed_at']) || !empty($e['control_verified_at'])): ?>
             <details class="detail detail--inline">
               <summary class="detail__more">Detail · justification · control</summary>
               <div class="detail__body">
@@ -242,6 +243,22 @@ function exc_url(array $over): string
                     <dt>Reference</dt><dd class="mono"><?= e($e['ref_no']) ?></dd>
                   <?php endif; ?>
                   <dt>Approved by</dt><dd><?= e($e['approved_by']) ?: '—' ?></dd>
+                  <?php if (!empty($e['renewed_at'])): ?>
+                    <dt>Renewed</dt>
+                    <dd><?= fmt_date($e['renewed_at']) ?> · <?= e($e['renewed_by']) ?: '—' ?>
+                      <?php if (trim((string) $e['renewal_note']) !== ''): ?>
+                        <span class="muted">— <?= e($e['renewal_note']) ?></span>
+                      <?php endif; ?>
+                    </dd>
+                  <?php endif; ?>
+                  <?php if (!empty($e['control_verified_at'])): ?>
+                    <dt>Control verified</dt>
+                    <dd><?= fmt_date($e['control_verified_at']) ?> · <?= e($e['control_verified_by']) ?: '—' ?>
+                      <?php if (trim((string) $e['control_verified_note']) !== ''): ?>
+                        <span class="muted">— <?= e($e['control_verified_note']) ?></span>
+                      <?php endif; ?>
+                    </dd>
+                  <?php endif; ?>
                   <dt>Recorded</dt><dd><?= fmt_date($e['created_at']) ?></dd>
                 </dl>
               </div>
@@ -363,6 +380,8 @@ function exc_url(array $over): string
 
     <ul class="bullets">
       <li><b>Every deviation has a period.</b> Start and end dates are mandatory in practice: inside 30 days of the end the row reads <b>Expiring</b>, past the end it reads <b>Expired</b> until it is renewed or revoked.</li>
+      <li><b>Extending is an approval, not a date edit.</b> The period end can only move through <b>Renew</b>, which is limited to managers and administrators and records the new end, the approver, the moment and the reason. The previous end date stays in the audit trail.</li>
+      <li><b>The control is checked, not assumed.</b> A manager records the date, the note and their name when the compensating control is verified; the register shows the last verification beside the approval.</li>
       <li><b>Categories are adjustable.</b> USB storage, website access, cameras and cloud apps ship as defaults; add your own from the panel on the left. Renaming a category carries its exceptions with it.</li>
       <li><b>Detail is the audit trail.</b> The register keeps the target (serial number, domain or camera ID), who holds it, the business justification and the compensating control.</li>
       <li><b>Nothing is silent.</b> Records with an expired period or a missing approval stay visible in the list instead of disappearing — the point of the register is to see them.</li>

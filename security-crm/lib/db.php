@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261125;
+const SCHEMA_VERSION = 20261126;
 
 function db(array $cfg): PDO
 {
@@ -314,6 +314,12 @@ CREATE TABLE IF NOT EXISTS exceptions (
     risk_level    ENUM('High','Medium','Low') NOT NULL DEFAULT 'Medium',
     owner         VARCHAR(100) NOT NULL DEFAULT '',
     approved_by   VARCHAR(100) NOT NULL DEFAULT '',
+    renewed_at    DATETIME NULL,
+    renewed_by    VARCHAR(100) NOT NULL DEFAULT '',
+    renewal_note  VARCHAR(255) NOT NULL DEFAULT '',
+    control_verified_at   DATE NULL,
+    control_verified_by   VARCHAR(100) NOT NULL DEFAULT '',
+    control_verified_note VARCHAR(255) NOT NULL DEFAULT '',
     ref_no        VARCHAR(40)  NOT NULL DEFAULT '',
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -390,6 +396,18 @@ SQL;
     // EDLP register (20261125): "system" said nothing about what the value is;
     // the column now names the source system. Existing values are kept.
     ensure_renamed_column($pdo, 'exceptions', 'system', 'source_system', "VARCHAR(40) NOT NULL DEFAULT 'EDLP'");
+
+    // Renewal path (20261126): extending an exception is an approved act, so it
+    // records its approver, its moment and its reason, and the compensating
+    // control records when it was last checked and what was found.
+    ensure_columns($pdo, 'exceptions', [
+        'renewed_at'            => 'DATETIME NULL',
+        'renewed_by'            => "VARCHAR(100) NOT NULL DEFAULT ''",
+        'renewal_note'          => "VARCHAR(255) NOT NULL DEFAULT ''",
+        'control_verified_at'   => 'DATE NULL',
+        'control_verified_by'   => "VARCHAR(100) NOT NULL DEFAULT ''",
+        'control_verified_note' => "VARCHAR(255) NOT NULL DEFAULT ''",
+    ]);
 }
 
 /** Add missing columns to an existing table (no-op when present). */

@@ -209,7 +209,7 @@ function nav_cache_forget(string $key): void
         return;
     }
     unset($_SESSION['nav_cache'][$key]);
-    foreach (array_keys($_SESSION['nav_cache']) as $slot) {
+    foreach (array_keys($_SESSION['nav_cache'] ?? []) as $slot) {
         if (strpos((string) $slot, $key . '/') === 0) {
             unset($_SESSION['nav_cache'][$slot]);
         }
@@ -323,6 +323,33 @@ function exception_state(array $e): array
 function exception_period(array $e): string
 {
     return fmt_date($e['period_start'] ?? null) . ' → ' . fmt_date($e['period_end'] ?? null);
+}
+
+/**
+ * Why a renewal must be refused, or null when it may go ahead.
+ *
+ * A renewal is not a date edit: it hands the exception real future time, names
+ * its approver and carries the reason, so the register can show who let the
+ * deviation continue and why.
+ */
+function exception_renew_error(array $e, ?string $new_end, string $note): ?string
+{
+    if (($e['status'] ?? '') === 'Revoked') {
+        return 'A revoked exception cannot be renewed — record a new exception instead.';
+    }
+    if ($new_end === null) {
+        return 'Give the renewal a valid new period end.';
+    }
+    if ($new_end <= date('Y-m-d')) {
+        return 'The new period end must be in the future.';
+    }
+    if ($new_end === (string) ($e['period_end'] ?? '')) {
+        return 'That is the period end already on record — change the date or use the edit form.';
+    }
+    if (trim($note) === '') {
+        return 'Say why the exception is being extended.';
+    }
+    return null;
 }
 
 /* ------------------------------------------------------------- client IP */

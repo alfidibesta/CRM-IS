@@ -35,6 +35,7 @@ function permission_list(): array
         'sop.manage'     => 'Create / edit / delete SOP & policy documents',
         'sop.acknowledge' => 'Acknowledge reading a policy or SOP',
         'exception.manage' => 'Add / edit / delete exceptions',
+        'exception.renew'  => 'Approve exception renewals & verify compensating controls',
         'exception.category' => 'Manage exception categories',
         'file.download'  => 'Read & download issue evidence',
         'user.manage'    => 'Manage users, roles and passwords',
@@ -59,7 +60,7 @@ function role_list(): array
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
                 'task.create', 'task.move', 'task.delete', 'template.edit', 'sop.manage', 'sop.acknowledge',
-                'exception.manage', 'exception.category', 'file.download', 'page.audit',
+                'exception.manage', 'exception.renew', 'exception.category', 'file.download', 'page.audit',
             ],
         ],
         'analyst' => [

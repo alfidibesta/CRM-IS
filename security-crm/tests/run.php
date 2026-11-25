@@ -62,6 +62,21 @@ ck('state expired', exception_state(['status' => 'Active', 'period_end' => date(
 ck('state pending', exception_state(['status' => 'Pending', 'period_end' => date('Y-m-d')])[0], 'Pending approval');
 ck('state revoked', exception_state(['status' => 'Revoked', 'period_end' => date('Y-m-d')])[0], 'Revoked');
 
+// A renewal is an approval: it needs future time, a reason and a live record.
+$pastExc  = date('Y-m-d', strtotime('-5 days'));
+$soonExc  = date('Y-m-d', strtotime('+5 days'));
+$laterExc = date('Y-m-d', strtotime('+400 days'));
+$live     = ['status' => 'Active', 'period_end' => $soonExc];
+ck('renew refuses a revoked exception',
+    exception_renew_error(['status' => 'Revoked', 'period_end' => $soonExc], $laterExc, 'why') !== null, true);
+ck('renew refuses a missing end date', exception_renew_error($live, null, 'why') !== null, true);
+ck('renew refuses a past end date', exception_renew_error($live, $pastExc, 'why') !== null, true);
+ck('renew refuses an unchanged end date', exception_renew_error($live, $soonExc, 'why') !== null, true);
+ck('renew needs a reason', exception_renew_error($live, $laterExc, '   ') !== null, true);
+ck('renew accepts a future end with a reason', exception_renew_error($live, $laterExc, 'vendor slip'), null);
+ck('an expired exception can still be renewed',
+    exception_renew_error(['status' => 'Active', 'period_end' => $pastExc], $laterExc, 'renew it'), null);
+
 /* ------------------------------------------------------------- templates */
 ck('placeholders unique', placeholders_of('{{A}} {{B}} {{A}}'), ['A' => 'A', 'B' => 'B']);
 ck('fill_text', fill_text('Hi {{NAME}}', ['NAME' => 'Sam']), 'Hi Sam');
@@ -360,6 +375,21 @@ $excSrc = $routerSrc . (string) file_get_contents(__DIR__ . '/../views/exception
 ck('no code reads or seeds the old exceptions system column',
     str_contains($excSrc, "['system']") || str_contains($excSrc, '(system,'),
     false);
+
+// Renewal and control verification are oversight acts, held by managers and
+// administrators only; analysts keep day-to-day editing.
+ck('renewal permission exists', isset(permission_list()['exception.renew']), true);
+ck('manager may approve a renewal', in_array('exception.renew', role_list()['manager']['perms'], true), true);
+ck('analyst may not approve a renewal', in_array('exception.renew', role_list()['analyst']['perms'], true), false);
+ck('viewer may not approve a renewal', in_array('exception.renew', role_list()['viewer']['perms'], true), false);
+ck('analyst keeps day-to-day exception editing', in_array('exception.manage', role_list()['analyst']['perms'], true), true);
+ck('renewal is a labelled audit event', audit_action_label('exception.renew'), 'Exception renewed');
+ck('control verification is a labelled audit event', audit_action_label('exception.control.verify'), 'Control verified');
+$schemaSql = (string) file_get_contents(__DIR__ . '/../schema.sql');
+ck('schema keeps the renewal approver', str_contains($schemaSql, '`renewed_by`'), true);
+ck('schema keeps the control verification', str_contains($schemaSql, '`control_verified_at`'), true);
+ck('the edit action keeps the stored period end',
+    str_contains($routerSrc, "period_end'] !== null"), true);
 
 /* -------------------------------------------------------------- client IP */
 

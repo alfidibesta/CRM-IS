@@ -60,6 +60,8 @@ function audit_actions(): array
         'exception.create' => ['Exception added', 'orange'],
         'exception.update' => ['Exception updated', 'orange'],
         'exception.delete' => ['Exception deleted', 'red'],
+        'exception.renew'  => ['Exception renewed', 'orange'],
+        'exception.control.verify' => ['Control verified', 'green'],
         'exception.category.create' => ['Category added', 'neutral'],
         'exception.category.update' => ['Category saved', 'neutral'],
         'exception.category.delete' => ['Category deleted', 'neutral'],

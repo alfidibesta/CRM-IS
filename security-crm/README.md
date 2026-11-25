@@ -202,7 +202,9 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
   screen, filled with placeholders and downloaded as real Word files.
 - **EDLP exceptions** — approved deviations with target, period, justification,
   compensating control and derived Active / Expiring / Expired state; adjustable
-  categories.
+  categories. Extending the period is a **renewal** (managers and administrators)
+  that records the approver, the moment and the reason, and the compensating
+  control keeps its own verification date, note and verifier.
 - **Notifications** — assignment, critical issue, due date, expiring exception
   and SOP review alerts, deduped per day, with unread/all filters.
 - **Audit trail and system log** — every action recorded and exportable as CSV,
@@ -250,6 +252,11 @@ give each existing document a baseline revision; nothing else changes.
 
 Build `20261125` renames `exceptions.system` to `exceptions.source_system`; the
 column is renamed in place on the next request, so existing values are kept.
+
+Build `20261126` adds the exception renewal path: `renewed_at`, `renewed_by`,
+`renewal_note`, `control_verified_at`, `control_verified_by` and
+`control_verified_note` on `exceptions`. The columns are added on the next
+request; existing rows keep their dates and simply show no renewal yet.
 
 This build (`20261122`) adds `prev_hash` and `row_hash` to `audit_log` and seals
 the entries that already exist, once, in id order. It is additive and reversible:
@@ -314,6 +321,7 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Acknowledge reading a policy or SOP | ✓ | ✓ | ✓ | ✓ |
 | See who has read a document revision | ✓ | ✓ | — | — |
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
+| Approve a renewal / verify a compensating control | ✓ | ✓ | — | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |
 | Read persons involved (contact, statements) | ✓ | ✓ | ✓ | — |
@@ -356,6 +364,15 @@ compensating control and who approved it. State is derived: **Active**,
 **Expiring** (≤ 30 days left), **Expired**, **Pending approval**, **Revoked**.
 Categories live in `exception_categories` and are fully adjustable — add, rename
 (records follow), restyle or delete when unused.
+
+The **period end is approval-bearing**: the edit form shows it read-only, and it
+only moves through *Renew* — a separate action limited to managers and
+administrators that records the new end date, the reason, the approver
+(`renewed_by`), the moment (`renewed_at`) and sets the status back to Active. A
+revoked exception cannot be renewed, and the new end must be in the future. The
+compensating control carries `control_verified_at`, `control_verified_by` and
+`control_verified_note`, so "the control is still in force" is a dated record
+rather than an assumption.
 
 ## Themes, density and panels
 

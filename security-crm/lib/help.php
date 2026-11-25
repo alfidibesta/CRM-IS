@@ -101,9 +101,11 @@ function help_topics(): array
             'steps'   => [
                 'Filter by status or category, or search, then expand a row to read the justification and control.',
                 '"+ Add EDLP exception" records a new deviation; its period end drives the expiry alerts.',
+                'Edit -> Renew extends the period: managers and administrators record the new end, the reason, the approver and the moment. The edit form itself cannot move the period end.',
+                'Edit -> Verify the compensating control records the date, what was checked and who checked it.',
                 'Managers edit or delete entries and maintain the category list at the bottom of the page.',
             ],
-            'tip' => 'An exception expiring within 30 days alerts both the owner and the security managers.',
+            'tip' => 'Renew before the period ends: an extension recorded on the last day, with a fresh control verification, is the easiest audit answer.',
         ],
 
         'audit' => [

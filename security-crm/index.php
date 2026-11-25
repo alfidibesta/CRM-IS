@@ -170,6 +170,8 @@ function action_permission(string $action): ?string
         'create_exception'          => 'exception.manage',
         'update_exception'          => 'exception.manage',
         'delete_exception'          => 'exception.manage',
+        'renew_exception'           => 'exception.renew',
+        'verify_exception_control'  => 'exception.renew',
         'create_exception_category' => 'exception.category',
         'update_exception_category' => 'exception.category',
         'delete_exception_category' => 'exception.category',
@@ -608,13 +610,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cats     = exception_category_names($pdo);
             $category = in_array($_POST['category'] ?? '', $cats, true) ? (string) $_POST['category'] : (string) $old['category'];
             $start    = date_or($_POST['period_start'] ?? '', (string) $old['period_start']);
-            $end      = date_or($_POST['period_end'] ?? '', null);
-            if ($end !== null && $start !== null && $end < $start) {
-                [$start, $end] = [$end, $start];
-            }
+            // The period end is approval-bearing: it only moves through a
+            // renewal, so a routine edit can never extend a deviation silently.
+            $end      = $old['period_end'] !== null ? (string) $old['period_end'] : null;
             $excTitle = clamp($_POST['title'] ?? '', 200);
             if ($excTitle === '') {
                 $_SESSION['form_error'] = 'An exception title is required; nothing was saved.';
+                back_to('exceptions');
+            }
+            if ($start !== null && $end !== null && $start > $end) {
+                $_SESSION['form_error'] = 'The period start cannot be after the period end (' . $end . '); nothing was saved.';
                 back_to('exceptions');
             }
 
@@ -639,6 +644,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             audit('exception.update', 'exception', $eid, (string) $old['code'], 'Period ' . $start . ' to ' . ($end ?? '—') . ' · ' . $category);
             flash("Exception {$old['code']} updated.");
+            back_to('exceptions');
+
+        case 'renew_exception':
+            // Extending a deviation is an approval, not a date fix: it records
+            // the new end, the approver, the moment and the reason.
+            $eid = (int) ($_POST['exception_id'] ?? 0);
+            $st = $pdo->prepare('SELECT * FROM exceptions WHERE id = ?');
+            $st->execute([$eid]);
+            $old = $st->fetch();
+            if (!$old) {
+                back_to('exceptions');
+            }
+
+            $newEnd = date_or($_POST['period_end'] ?? '', null);
+            $reason = clamp($_POST['renewal_note'] ?? '', 255);
+            $refuse = exception_renew_error($old, $newEnd, $reason);
+            if ($refuse !== null) {
+                $_SESSION['form_error'] = $refuse;
+                back_to('exceptions');
+            }
+
+            $pdo->prepare("UPDATE exceptions
+                              SET period_end = ?, status = 'Active', approved_by = ?,
+                                  renewed_at = NOW(), renewed_by = ?, renewal_note = ?
+                            WHERE id = ?")
+                ->execute([$newEnd, $u, $u, $reason, $eid]);
+
+            audit('exception.renew', 'exception', $eid, (string) $old['code'],
+                'Period end ' . ($old['period_end'] ?? '—') . ' to ' . $newEnd . ' · ' . $reason);
+            flash("Exception {$old['code']} renewed to {$newEnd}.");
+            back_to('exceptions');
+
+        case 'verify_exception_control':
+            // Evidence that the compensating control is actually in force —
+            // dated, noted and attributed, so a renewal has something behind it.
+            $eid = (int) ($_POST['exception_id'] ?? 0);
+            $st = $pdo->prepare('SELECT * FROM exceptions WHERE id = ?');
+            $st->execute([$eid]);
+            $old = $st->fetch();
+            if (!$old) {
+                back_to('exceptions');
+            }
+
+            $checkedOn = date_or($_POST['verified_on'] ?? '', null);
+            $note      = clamp($_POST['verification_note'] ?? '', 255);
+            $control   = trim((string) ($old['control'] ?? ''));
+
+            if ($control === '') {
+                $_SESSION['form_error'] = 'Record the compensating control before verifying it.';
+                back_to('exceptions');
+            }
+            if ($checkedOn === null || $note === '') {
+                $_SESSION['form_error'] = 'A verification needs a valid date and a note on what was checked.';
+                back_to('exceptions');
+            }
+            if ($checkedOn > date('Y-m-d')) {
+                $_SESSION['form_error'] = 'A verification cannot be dated in the future.';
+                back_to('exceptions');
+            }
+
+            $pdo->prepare('UPDATE exceptions
+                              SET control_verified_at = ?, control_verified_by = ?, control_verified_note = ?
+                            WHERE id = ?')
+                ->execute([$checkedOn, $u, $note, $eid]);
+
+            audit('exception.control.verify', 'exception', $eid, (string) $old['code'],
+                'Control verified ' . $checkedOn . ' · ' . $note);
+            flash("Compensating control for {$old['code']} verified on {$checkedOn}.");
             back_to('exceptions');
 
         case 'delete_exception':
