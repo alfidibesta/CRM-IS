@@ -5,6 +5,20 @@ function e(?string $v): string
     return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 }
 
+/** Rows per page for every paginated register and feed. */
+const LIST_PER_PAGE = 50;
+
+/**
+ * Hidden field carrying the list state (filters and page) a form was posted
+ * from, so its action can return the user to that exact view.
+ */
+function back_qs_field(): string
+{
+    $qs = (string) ($_SERVER['QUERY_STRING'] ?? '');
+
+    return $qs === '' ? '' : '<input type="hidden" name="back_qs" value="' . e($qs) . '">';
+}
+
 /** Small pill badge. $tone drives the colour (red / blue / orange / neutral). */
 function badge(string $label, string $tone = 'neutral'): string
 {

@@ -167,6 +167,7 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="notifications_read">
                 <input type="hidden" name="back" value="<?= e($page) ?>">
+                <?= back_qs_field() ?>
                 <button type="submit" class="btn btn--ghost btn--xs">Mark all read</button>
               </form>
             <?php endif; ?>

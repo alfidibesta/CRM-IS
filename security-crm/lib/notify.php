@@ -218,7 +218,7 @@ function notify_filters(array $get): array
 }
 
 /** One page of the signed-in user's notifications. */
-function notify_fetch(PDO $pdo, int $uid, array $f, int $page = 1, int $per = 30): array
+function notify_fetch(PDO $pdo, int $uid, array $f, int $page = 1, int $per = LIST_PER_PAGE): array
 {
     $where = ['user_id = ?'];
     $args  = [$uid];
@@ -243,7 +243,14 @@ function notify_fetch(PDO $pdo, int $uid, array $f, int $page = 1, int $per = 30
         . ' ORDER BY created_at DESC, id DESC LIMIT ' . $per . ' OFFSET ' . (($page - 1) * $per));
     $st->execute($args);
 
-    return ['rows' => $st->fetchAll(), 'total' => $total, 'page' => $page, 'pages' => $pages];
+    return [
+        'rows'   => $st->fetchAll(),
+        'total'  => $total,
+        'page'   => $page,
+        'pages'  => $pages,
+        'per'    => $per,
+        'offset' => ($page - 1) * $per,
+    ];
 }
 
 /** Mark everything of this user read; returns how many changed. */

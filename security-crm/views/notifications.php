@@ -52,6 +52,7 @@ function notif_url(array $over): string
       <?= csrf_field() ?>
       <input type="hidden" name="action" value="notifications_read">
       <input type="hidden" name="back" value="notifications">
+      <?= back_qs_field() ?>
       <button type="submit" class="btn btn--ghost">Mark all <?= $unread ?> read</button>
     </form>
   <?php endif; ?>
@@ -92,6 +93,7 @@ function notif_url(array $over): string
               <input type="hidden" name="action" value="notification_read">
               <input type="hidden" name="id" value="<?= (int) $n['id'] ?>">
               <input type="hidden" name="back" value="notifications">
+              <?= back_qs_field() ?>
               <button type="submit" class="btn btn--ghost btn--xs">Mark read</button>
             </form>
           <?php endif; ?>
@@ -108,8 +110,18 @@ function notif_url(array $over): string
 </section>
 
 <?php if ($res['pages'] > 1): ?>
+  <?php
+    $from = (int) $res['offset'] + 1;
+    $to   = (int) $res['offset'] + count($rows);
+    $unit = $f['state'] === 'all'
+        ? 'notification' . ((int) $res['total'] === 1 ? '' : 's')
+        : 'unread notification' . ((int) $res['total'] === 1 ? '' : 's');
+  ?>
 <nav class="pager" aria-label="Notification pages">
-  <span class="muted">Page <?= (int) $res['page'] ?> of <?= (int) $res['pages'] ?> · <?= (int) $res['total'] ?> shown in this filter</span>
+  <span class="muted">
+    Page <?= (int) $res['page'] ?> of <?= (int) $res['pages'] ?> ·
+    showing <?= number_format($from) ?>–<?= number_format($to) ?> of <?= number_format((int) $res['total']) ?> <?= $unit ?>
+  </span>
   <?php if ($res['page'] > 1): ?>
     <a class="btn btn--ghost btn--xs" href="<?= e(notif_url(['p' => $res['page'] - 1])) ?>">← Newer</a>
   <?php endif; ?>

@@ -124,11 +124,28 @@ function back_to(string $back, int $id = 0): void
     if (!in_array($back, $pages, true)) {
         $back = 'dashboard';
     }
-    $url = '?page=' . $back;
+    $query = ['page' => $back];
     if ($id > 0) {
-        $url .= '&id=' . $id;
+        $query['id'] = $id;
+    } else {
+        // Return to the page, filters and page number the form was posted
+        // from, instead of resetting the list to its first page.
+        $state_qs = $_POST['back_qs'] ?? '';
+        $state    = [];
+        if (is_string($state_qs)) {
+            parse_str($state_qs, $state);
+        }
+        foreach ($state as $key => $value) {
+            if (!is_string($key) || !is_string($value) || !preg_match('/^[a-z][a-z0-9_]{0,23}$/i', $key)) {
+                continue;
+            }
+            if (in_array($key, ['page', 'id', 'action', 'back', 'back_qs', 'csrf', 'once'], true)) {
+                continue;
+            }
+            $query[$key] = mb_substr($value, 0, 100);
+        }
     }
-    header('Location: ' . $url);
+    header('Location: ?' . http_build_query($query));
     exit;
 }
 

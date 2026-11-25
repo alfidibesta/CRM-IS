@@ -156,8 +156,13 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
 </section>
 
 <?php if ($res['pages'] > 1): ?>
+  <?php $from = ($res['page'] - 1) * $res['per'] + 1; ?>
 <nav class="pager" aria-label="Audit trail pages">
-  <span class="muted">Page <?= (int) $res['page'] ?> of <?= (int) $res['pages'] ?> · <?= number_format($res['total']) ?> events</span>
+  <span class="muted">
+    Page <?= (int) $res['page'] ?> of <?= (int) $res['pages'] ?> ·
+    showing <?= number_format($from) ?>–<?= number_format($from + count($rows) - 1) ?> of
+    <?= number_format($res['total']) ?> event<?= $res['total'] === 1 ? '' : 's' ?>
+  </span>
   <?php if ($res['page'] > 1): ?>
     <a class="btn btn--ghost btn--xs" href="<?= e(audit_url(['p' => $res['page'] - 1])) ?>">← Newer</a>
   <?php endif; ?>

@@ -21,7 +21,7 @@ $join = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
 // One page of the register at a time: at a few thousand issues the old
 // unbounded SELECT * pulled every row into memory on each filter click.
-$per    = 50;
+$per    = LIST_PER_PAGE;
 $pageNo = max(1, (int) ($_GET['p'] ?? 1));
 
 $countSt = $pdo->prepare('SELECT COUNT(*) FROM issues' . $join);
@@ -228,7 +228,7 @@ $canExport = can('issue.export');
         $overdue = $r['due_at'] && $r['due_at'] < date('Y-m-d') && $r['status'] !== 'Resolved';
       ?>
       <tr class="row <?= $overdue ? 'row--overdue' : '' ?>">
-        <td class="num"><?= $i + 1 ?></td>
+        <td class="num"><?= $offset + $i + 1 ?></td>
         <td class="cell-issue">
           <a class="cell-issue__link" href="?page=issue&amp;id=<?= (int) $r['id'] ?>">
             <span class="mono"><?= e($r['code']) ?></span>
@@ -250,6 +250,7 @@ $canExport = can('issue.export');
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="set_issue_status">
               <input type="hidden" name="back" value="issues">
+              <?= back_qs_field() ?>
               <input type="hidden" name="issue_id" value="<?= (int) $r['id'] ?>">
               <select name="status" data-autosubmit aria-label="Status for <?= e($r['code']) ?>">
                 <?php foreach (['Open', 'In Progress', 'Contained', 'Resolved'] as $s): ?>

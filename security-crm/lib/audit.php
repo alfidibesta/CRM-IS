@@ -581,7 +581,7 @@ function audit_where(array $f): array
  *
  * @return array{rows: array, total: int, page: int, pages: int, per: int}
  */
-function audit_search(PDO $pdo, array $f, int $page = 1, int $per = 40): array
+function audit_search(PDO $pdo, array $f, int $page = 1, int $per = LIST_PER_PAGE): array
 {
     $per  = max(1, min(5000, $per));
     $page = max(1, $page);
