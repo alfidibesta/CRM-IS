@@ -11,6 +11,7 @@ $nav = [
     ['sop',       'SOP & Policy', 'blue', 'page.sop'],
     ['templates', 'Templates', 'neutral', 'page.templates'],
     ['exceptions', 'EDLP Exceptions', 'orange', 'page.exceptions'],
+    ['ot',        'OT Vulnerabilities', 'red', 'page.ot'],
     ['audit',     'Audit trail',  'neutral', 'page.audit'],
 ];
 

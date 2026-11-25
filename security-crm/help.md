@@ -2,8 +2,8 @@
 
 Information security work management for the plant floor: issue reports with
 evidence and persons involved, a workflow board, a controlled SOP library, a
-form/template library with Word export, an EDLP exception register and an
-audited trail of every change.
+form/template library with Word export, an EDLP exception register, an OT
+vulnerability register and an audited trail of every change.
 
 This file is the long-form manual. Every screen also carries a **Help** button
 in the top bar that explains that screen in place, so you rarely need to leave
@@ -230,7 +230,59 @@ and the security managers.
 
 ---
 
-## 10. Audit Trail
+## 10. OT Vulnerabilities
+
+Daily monitoring and management of factory-automation (FA) weaknesses — PLC,
+HMI, SCADA, drives, vision systems, engineering workstations and the network
+between them. A weakness here cannot be patched like an ordinary IT issue, so
+the register records where it is, what it is, how important it is and who is
+working on it.
+
+**Vulnerability registration** carries the shop-floor fields:
+
+- **Business Location** — required; the plant, line or utility area. The list
+  of locations on record is a dropdown; **Other (direct input)** accepts a new
+  one and stores it verbatim.
+- **Vulnerabilities** — required; the weakness type (unpatched CVE/firmware,
+  end-of-life OS/firmware, default or weak credentials, unauthenticated or
+  unencrypted protocol, missing network segmentation, remote/vendor access
+  exposure, missing hardening, weak backup, physical/USB exposure). **Other
+  (direct input)** accepts a type the catalogue does not name.
+- **Importance** — Critical, High, Medium or Low, the plant's own call with the
+  production consequence in mind.
+- **Report Confirmation Date** — the date the finding was confirmed on record;
+  it drives the register's date column and the due-date check.
+- **Target Facilities and Systems** — the PLC, HMI, drive, controller, server or
+  cell the weakness touches, with hostname or address (example: *Production
+  line PLC (S7-315) · 10.30.3.11*).
+- **Remarks** — additional checks and what was seen.
+
+**Monitoring and management** (same form, second group) holds the current
+status, remediation due date, **PC risk management** (Managed, Partially
+managed, Not managed), **recent contact**, owner, optional CVSS score and
+advisory reference, **risk control** in force and the recommendation.
+
+**List of vulnerabilities** shows the same columns as the registration sheet:
+Report Confirmation Date, Business Sites, Vulnerabilities, Target Facilities and
+Systems, Importance, Current Status, Recent Contacts and Management. Filter with
+*Business Location Inquiry*, the vulnerability chips or the status chips, or
+search the vulnerability, facility, contact and reference; expand a row for the
+remarks, control and recommendation.
+
+- **Vulnerability registration** (`ot.manage`) records a finding; **Edit** in the
+  row opens the full form and the delete button.
+- Current status is derived: **Open**, **Mitigating** (blue), **Overdue** (red,
+  past the due date while still open), **Risk accepted** (blue) and **Resolved**
+  (green).
+- The stat cards count open findings, open critical/high findings, overdue
+  remediation and open findings whose PC risk is *not managed*, so a missing
+  owner is visible instead of inferred.
+- CVSS is kept to one decimal (0.0–10.0) and shown beside the advisory
+  reference inside the row's detail; importance is kept separate from it.
+
+---
+
+## 11. Audit Trail
 
 Every recorded action: sign-in and failed sign-in, issue and task changes,
 template and exception changes, user administration, evidence upload, download
@@ -257,7 +309,7 @@ disk or share.
 
 ---
 
-## 11. Users & Authority
+## 12. Users & Authority
 
 - **Accounts** — create (unique username, password of at least 8 characters),
   edit name, e-mail, role and active state, reset a password, delete.
@@ -271,7 +323,7 @@ administrator cannot be deleted.
 
 ---
 
-## 12. Notifications
+## 13. Notifications
 
 - Tabs for **unread** and **all**, plus a kind filter (assigned, critical, due,
   exception expiring/expired, SOP review).
@@ -281,7 +333,7 @@ administrator cannot be deleted.
 
 ---
 
-## 13. System Log
+## 14. System Log
 
 The tail of the application's error log, with a keyword filter. It is for faults
 (upload failures, database errors), not for change history — that is the audit
@@ -289,7 +341,7 @@ trail.
 
 ---
 
-## 14. Word exports
+## 15. Word exports
 
 - **Issue report** — `SEC-xxxx-issue-report.docx` from the issue page or the
   register row.
@@ -300,21 +352,24 @@ trail.
 
 ---
 
-## 15. Data conventions
+## 16. Data conventions
 
 | Term | Meaning |
 | --- | --- |
 | `SEC-1001` | Issue code, assigned in sequence. |
 | `EXC-001` | EDLP exception code. |
+| `OTV-001` | OT vulnerability code. |
 | `TPL-001` | Form template code. |
 | Risk score | likelihood (1–5) × impact (1–5), 1–25. |
 | Severity | Critical, High, Medium, Low. |
 | Issue status | Open, In progress, Contained, Resolved (Resolved stamps a closed date). |
 | Document status | Active, Draft, In Review, Obsolete. |
+| OT status | Open, Mitigating, Accepted, Resolved. |
+| OT importance | Critical, High, Medium, Low. |
 
 ---
 
-## 16. Troubleshooting
+## 17. Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
@@ -328,7 +383,7 @@ trail.
 
 ---
 
-## 17. Where to look next
+## 18. Where to look next
 
 | File | Contents |
 | --- | --- |

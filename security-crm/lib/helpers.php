@@ -352,6 +352,204 @@ function exception_renew_error(array $e, ?string $new_end, string $note): ?strin
     return null;
 }
 
+/* ------------------------------------------------- OT vulnerabilities */
+
+/**
+ * OT vulnerability register helpers.
+ *
+ * Operational-technology findings on factory-automation assets (PLC, HMI,
+ * SCADA, drives, vision, engineering workstations, switches) live in their own
+ * register because they answer different questions from an IT issue: which
+ * business location and target facility, which weakness, how important it is
+ * for production, which control holds the risk down and who owns the fix.
+ */
+
+/**
+ * OT vulnerability types (the "Vulnerabilities" dropdown) and their tone.
+ *
+ * These are weakness classes seen on factory-automation assets — PLC, HMI,
+ * SCADA, engineering workstations, drives and the network between them — not
+ * asset classes: the asset itself is recorded in "Target facilities and
+ * systems". The list is a catalogue, so "Other (direct input)" is always
+ * offered and the typed value is stored verbatim.
+ */
+function ot_categories(): array
+{
+    return [
+        'Unpatched CVE / vulnerable firmware'     => 'red',
+        'End-of-life OS / firmware'               => 'red',
+        'Default or weak credentials'             => 'red',
+        'Unauthenticated / unencrypted protocol'  => 'orange',
+        'Missing network segmentation'            => 'orange',
+        'Remote / vendor access exposure'         => 'orange',
+        'Missing hardening / baseline'            => 'blue',
+        'Weak backup / recovery'                  => 'blue',
+        'Physical / USB exposure'                 => 'blue',
+        'Other'                                   => 'neutral',
+    ];
+}
+
+/** Value posted by the "Other (direct input)" option of a catalogue dropdown. */
+const OT_OTHER = '__other';
+
+function ot_category_names(): array
+{
+    return array_keys(ot_categories());
+}
+
+function ot_category_tone(string $name): string
+{
+    return ot_categories()[$name] ?? 'neutral';
+}
+
+/**
+ * Resolve a catalogue dropdown that offers "Other (direct input)".
+ *
+ * A known value is kept, the typed value is used when Other is chosen, and
+ * anything unrecognised (a tampered form) falls back to what was stored, so a
+ * posted value can never invent a chip or a tone.
+ */
+function ot_catalog_choice(string $select, string $other, array $allowed, string $fallback = ''): string
+{
+    if ($select !== OT_OTHER && in_array($select, $allowed, true)) {
+        return $select;
+    }
+    $custom = $select === OT_OTHER ? clamp($other, 60) : '';
+    return $custom !== '' ? $custom : $fallback;
+}
+
+/**
+ * Resolve the business-location dropdown, whose catalogue is the sites on
+ * record. A site may be typed in, so any value is accepted once trimmed.
+ */
+function ot_site_choice(string $select, string $other, string $fallback = ''): string
+{
+    if ($select !== '' && $select !== OT_OTHER) {
+        return clamp($select, 120);
+    }
+    if ($select === OT_OTHER) {
+        $custom = clamp($other, 120);
+        if ($custom !== '') {
+            return $custom;
+        }
+    }
+    return $fallback;
+}
+
+/** How the process-control risk is currently managed. */
+function ot_pc_risk_options(): array
+{
+    return ['Managed', 'Partially managed', 'Not managed'];
+}
+
+function ot_statuses(): array
+{
+    return ['Open', 'Mitigating', 'Accepted', 'Resolved'];
+}
+
+/** Severity accent. */
+function ot_severity_tone(string $severity): string
+{
+    return ['Critical' => 'red', 'High' => 'red', 'Medium' => 'orange', 'Low' => 'green'][$severity] ?? 'neutral';
+}
+
+/** Days until the remediation is due (negative when overdue). */
+function ot_days_left(?string $due): ?int
+{
+    if (!$due) {
+        return null;
+    }
+    $ts = strtotime($due . ' 00:00:00');
+    if (!$ts) {
+        return null;
+    }
+    return (int) round(($ts - strtotime(date('Y-m-d') . ' 00:00:00')) / 86400);
+}
+
+/** Display state of an OT vulnerability: [label, tone]. */
+function ot_state(array $v): array
+{
+    if (($v['status'] ?? '') === 'Resolved') {
+        return ['Resolved', 'green'];
+    }
+    if (($v['status'] ?? '') === 'Accepted') {
+        return ['Risk accepted', 'blue'];
+    }
+    $days = ot_days_left($v['due_at'] ?? null);
+    if ($days !== null && $days < 0) {
+        return ['Overdue', 'red'];
+    }
+    if (($v['status'] ?? '') === 'Mitigating') {
+        return ['Mitigating', 'blue'];
+    }
+    return ['Open', 'orange'];
+}
+
+/**
+ * Normalise the posted fields of the OT form.
+ *
+ * Values that do not belong to a known list fall back to the stored value (on
+ * an edit) or stay blank so the form can ask for them; a site or vulnerability
+ * typed through "Other (direct input)" is kept verbatim. CVSS is kept one
+ * decimal and only inside 0.0–10.0. The legacy `title` column is derived from
+ * the vulnerability type and the target, because the register identifies a row
+ * by those two fields rather than by a separate headline.
+ */
+function ot_fields(array $in, array $old = []): array
+{
+    $cats     = ot_category_names();
+    $pc       = ot_pc_risk_options();
+    $statuses = ot_statuses();
+    $severity = ['Critical', 'High', 'Medium', 'Low'];
+
+    $cvss = null;
+    $raw  = trim((string) ($in['cvss_score'] ?? ''));
+    if ($raw !== '' && is_numeric($raw)) {
+        $n = (float) $raw;
+        if ($n >= 0 && $n <= 10) {
+            $cvss = number_format(round($n, 1), 1, '.', '');
+        }
+    }
+
+    $site     = ot_site_choice((string) ($in['site'] ?? ''), (string) ($in['site_other'] ?? ''), (string) ($old['site'] ?? ''));
+    $asset    = clamp($in['asset'] ?? '', 180);
+    $category = ot_catalog_choice((string) ($in['category'] ?? ''), (string) ($in['category_other'] ?? ''), $cats, (string) ($old['category'] ?? ''));
+
+    return [
+        'title'              => clamp($category !== '' ? ($asset !== '' ? $category . ' — ' . $asset : $category) : 'OT vulnerability', 200),
+        'site'               => $site,
+        'asset'              => $asset,
+        'category'           => $category,
+        'severity'           => in_array($in['severity'] ?? '', $severity, true) ? (string) $in['severity'] : ($old['severity'] ?? 'Medium'),
+        'cvss_score'         => $cvss,
+        'advisory_ref'       => clamp($in['advisory_ref'] ?? '', 60),
+        'detail'             => clamp($in['detail'] ?? '', 5000) ?: null,
+        'risk_control'       => clamp($in['risk_control'] ?? '', 255),
+        'recommendation'     => clamp($in['recommendation'] ?? '', 5000) ?: null,
+        'pc_risk_management' => in_array($in['pc_risk_management'] ?? '', $pc, true) ? (string) $in['pc_risk_management'] : ($old['pc_risk_management'] ?? 'Partially managed'),
+        'status'             => in_array($in['status'] ?? '', $statuses, true) ? (string) $in['status'] : ($old['status'] ?? 'Open'),
+        'recent_contact'     => clamp($in['recent_contact'] ?? '', 120),
+        'owner'              => clamp($in['owner'] ?? '', 100),
+        'identified_at'      => date_or($in['identified_at'] ?? '', $old['identified_at'] ?? date('Y-m-d')),
+        'due_at'             => date_or($in['due_at'] ?? '', $old['due_at'] ?? null),
+    ];
+}
+
+/** Why an OT entry cannot be saved, or null when it may. */
+function ot_fields_error(array $row): ?string
+{
+    if ($row['site'] === '') {
+        return 'Choose or enter the business location.';
+    }
+    if ($row['category'] === '') {
+        return 'Choose or enter the vulnerability type.';
+    }
+    if ($row['due_at'] !== null && $row['identified_at'] !== null && $row['due_at'] < $row['identified_at']) {
+        return 'The remediation due date cannot be before the report confirmation date.';
+    }
+    return null;
+}
+
 /* ------------------------------------------------------------- client IP */
 
 /**

@@ -18,6 +18,7 @@ function permission_list(): array
         'page.issues'    => 'Issue register & detail reports',
         'page.templates' => 'Form template library',
         'page.exceptions' => 'EDLP exception register',
+        'page.ot'        => 'OT vulnerability register',
         'page.logs'      => 'System log (errors)',
         'page.users'     => 'Users & authority',
         'page.audit'     => 'Audit trail (read-only)',
@@ -37,6 +38,7 @@ function permission_list(): array
         'exception.manage' => 'Add / edit / delete exceptions',
         'exception.renew'  => 'Approve exception renewals & verify compensating controls',
         'exception.category' => 'Manage exception categories',
+        'ot.manage'      => 'Add / edit / delete OT vulnerabilities',
         'file.download'  => 'Read & download issue evidence',
         'user.manage'    => 'Manage users, roles and passwords',
     ];
@@ -58,9 +60,11 @@ function role_list(): array
             'hint'  => 'Runs the programme: every record plus template control',
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates', 'page.exceptions',
+                'page.ot',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
                 'task.create', 'task.move', 'task.delete', 'template.edit', 'sop.manage', 'sop.acknowledge',
                 'exception.manage', 'exception.renew', 'exception.category', 'file.download', 'page.audit',
+                'ot.manage',
             ],
         ],
         'analyst' => [
@@ -70,6 +74,7 @@ function role_list(): array
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
                 'issue.create', 'issue.update', 'issue.note', 'issue.suspect', 'issue.person.read', 'issue.upload', 'issue.export',
                 'page.exceptions', 'exception.manage', 'sop.acknowledge',
+                'page.ot', 'ot.manage',
                 'task.create', 'task.move', 'file.download',
             ],
         ],
@@ -79,6 +84,7 @@ function role_list(): array
             'perms' => [
                 'page.dashboard', 'page.sop', 'page.workflow', 'page.issues', 'page.templates',
                 'page.exceptions', 'issue.export', 'page.audit', 'sop.acknowledge',
+                'page.ot',
             ],
         ],
     ];
@@ -110,6 +116,7 @@ function page_permission(string $page): string
         'template'   => 'page.templates',
         'doc'        => 'page.templates',
         'exceptions' => 'page.exceptions',
+        'ot'         => 'page.ot',
         'logs'       => 'page.logs',
         'users'      => 'page.users',
         'audit'      => 'page.audit',

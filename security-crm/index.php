@@ -115,7 +115,7 @@ auth_boot($pdo);
 audit_boot($pdo);
 notify_boot($pdo);
 
-$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'users', 'audit', 'logs', 'notifications', 'download', 'doc', 'issue_doc'];
+$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'ot', 'users', 'audit', 'logs', 'notifications', 'download', 'doc', 'issue_doc'];
 
 /** POST target: ?page=X ( + id ) — validated against the page whitelist. */
 function back_to(string $back, int $id = 0): void
@@ -175,6 +175,9 @@ function action_permission(string $action): ?string
         'create_exception_category' => 'exception.category',
         'update_exception_category' => 'exception.category',
         'delete_exception_category' => 'exception.category',
+        'create_otv'                => 'ot.manage',
+        'update_otv'                => 'ot.manage',
+        'delete_otv'                => 'ot.manage',
         'notifications_read' => 'page.dashboard',
         'notification_read'  => 'page.dashboard',
         'create_user'    => 'user.manage',
@@ -234,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Creation forms carry a one-shot token, so a resubmitted page cannot
     // create the same record twice.
-    if (in_array($action, ['create_issue', 'create_exception', 'create_task', 'create_template', 'create_sop', 'create_user'], true)
+    if (in_array($action, ['create_issue', 'create_exception', 'create_otv', 'create_task', 'create_template', 'create_sop', 'create_user'], true)
         && !once_check()) {
         flash('That form was already submitted — nothing was created twice.');
         back_to($back, $backId);
@@ -726,6 +729,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             back_to('exceptions');
 
+        case 'create_otv':
+            $row = ot_fields($_POST);
+            $err = ot_fields_error($row);
+            if ($err !== null) {
+                $_SESSION['form_error'] = $err;
+                back_to('ot');
+            }
+            $next = (int) $pdo->query('SELECT COALESCE(MAX(CAST(SUBSTRING(code,5) AS UNSIGNED)), 0) + 1 FROM ot_vulnerabilities')->fetchColumn();
+            $code = 'OTV-' . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
+
+            $pdo->prepare('INSERT INTO ot_vulnerabilities
+                    (code,title,site,asset,category,severity,cvss_score,advisory_ref,detail,
+                     risk_control,recommendation,pc_risk_management,status,owner,recent_contact,identified_at,due_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([
+                    $code, $row['title'], $row['site'], $row['asset'], $row['category'], $row['severity'],
+                    $row['cvss_score'], $row['advisory_ref'], $row['detail'], $row['risk_control'],
+                    $row['recommendation'], $row['pc_risk_management'], $row['status'], $row['owner'],
+                    $row['recent_contact'], $row['identified_at'], $row['due_at'],
+                ]);
+            audit('otv.create', 'ot_vulnerability', (int) $pdo->lastInsertId(), $code,
+                $row['site'] . ' · ' . $row['category'] . ' · ' . $row['severity']);
+            flash("OT finding {$code} added for {$row['site']}.");
+            back_to('ot');
+
+        case 'update_otv':
+            $oid = (int) ($_POST['otv_id'] ?? 0);
+            $st = $pdo->prepare('SELECT * FROM ot_vulnerabilities WHERE id = ?');
+            $st->execute([$oid]);
+            $old = $st->fetch();
+            if (!$old) {
+                back_to('ot');
+            }
+
+            $row = ot_fields($_POST, $old);
+            $err = ot_fields_error($row);
+            if ($err !== null) {
+                $_SESSION['form_error'] = $err . ' Nothing was saved.';
+                back_to('ot');
+            }
+
+            $pdo->prepare('UPDATE ot_vulnerabilities
+                              SET title=?, site=?, asset=?, category=?, severity=?, cvss_score=?, advisory_ref=?,
+                                  detail=?, risk_control=?, recommendation=?, pc_risk_management=?, status=?, owner=?,
+                                  recent_contact=?, identified_at=?, due_at=?
+                            WHERE id=?')
+                ->execute([
+                    $row['title'], $row['site'], $row['asset'], $row['category'], $row['severity'],
+                    $row['cvss_score'], $row['advisory_ref'], $row['detail'], $row['risk_control'],
+                    $row['recommendation'], $row['pc_risk_management'], $row['status'], $row['owner'],
+                    $row['recent_contact'], $row['identified_at'], $row['due_at'], $oid,
+                ]);
+
+            audit('otv.update', 'ot_vulnerability', $oid, (string) $old['code'],
+                $row['site'] . ' · ' . $row['status'] . ' · ' . $row['severity']
+                . ($row['status'] !== $old['status'] ? ' (was ' . $old['status'] . ')' : ''));
+            flash("OT finding {$old['code']} updated.");
+            back_to('ot');
+
+        case 'delete_otv':
+            $oid = (int) ($_POST['otv_id'] ?? 0);
+            $st = $pdo->prepare('SELECT code FROM ot_vulnerabilities WHERE id = ?');
+            $st->execute([$oid]);
+            $code = (string) $st->fetchColumn();
+            if ($code !== '') {
+                $pdo->prepare('DELETE FROM ot_vulnerabilities WHERE id = ?')->execute([$oid]);
+                audit('otv.delete', 'ot_vulnerability', $oid, $code, 'Removed from the OT register');
+                flash("OT finding {$code} deleted.");
+            }
+            back_to('ot');
+
         case 'create_exception_category':
             $name = trim(mb_substr((string) ($_POST['name'] ?? ''), 0, 60));
             if ($name === '') {
@@ -1168,6 +1242,20 @@ if ($page === 'exception_panel') {
     exit;
 }
 
+if ($page === 'ot_panel') {
+    if (!is_logged_in()) {
+        http_response_code(401);
+        exit('Your session expired — sign in and reload the page.');
+    }
+    if (!can('page.ot')) {
+        http_response_code(403);
+        exit('Not permitted.');
+    }
+    header('Cache-Control: no-store');
+    require __DIR__ . '/views/ot_panel.php';
+    exit;
+}
+
 if (!in_array($page, $pages, true)) {
     $page = 'dashboard';
 }
@@ -1325,6 +1413,7 @@ $titles = [
     'issue'     => ['Issue Detail Report', 'Full investigation record, evidence and sign-off'],
     'templates' => ['Form Templates', 'NDA, agreements and controlled forms — download as Word'],
     'template'  => ['Template Detail', 'Preview, fill in and download as .docx'],    'exceptions' => ['EDLP Exceptions', 'Approved deviations for USB, websites, cameras and more'],
+    'ot'        => ['OT Vulnerabilities', 'Process-control findings by site, asset and control'],
     'logs'      => ['System Log', 'Uncaught errors written by the application'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
     'audit'     => ['Audit Trail', 'Every recorded change, who made it and from where'],

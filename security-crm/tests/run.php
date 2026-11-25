@@ -391,6 +391,80 @@ ck('schema keeps the control verification', str_contains($schemaSql, '`control_v
 ck('the edit action keeps the stored period end',
     str_contains($routerSrc, "period_end'] !== null"), true);
 
+/* ------------------------------------------------ OT vulnerability register */
+
+$otPast = date('Y-m-d', strtotime('-4 days'));
+ck('OT state open', ot_state(['status' => 'Open', 'due_at' => date('Y-m-d', strtotime('+20 days'))])[0], 'Open');
+ck('OT state mitigating', ot_state(['status' => 'Mitigating', 'due_at' => date('Y-m-d')])[0], 'Mitigating');
+ck('OT state overdue', ot_state(['status' => 'Open', 'due_at' => $otPast])[0], 'Overdue');
+ck('OT state accepted', ot_state(['status' => 'Accepted', 'due_at' => null])[0], 'Risk accepted');
+ck('OT state resolved', ot_state(['status' => 'Resolved', 'due_at' => $otPast])[0], 'Resolved');
+ck('OT days left counts to the due date', ot_days_left(date('Y-m-d', strtotime('+9 days'))), 9);
+ck('OT days left without a due date', ot_days_left(null), null);
+
+ck('OT catalogue offers a direct-input fallback', in_array('Other', ot_category_names(), true), true);
+ck('OT catalogue names weakness types, not asset classes', in_array('PLC / RTU', ot_category_names(), true), false);
+ck('OT catalogue keeps an unknown value neutral', ot_category_tone('Unsafe robot teach pendant'), 'neutral');
+
+$otBase = [
+    'site' => '  Plant 1 · Line 3 ', 'category' => 'Unauthenticated / unencrypted protocol',
+    'asset' => 'PLC-1 · 10.0.0.5', 'severity' => 'Critical', 'cvss_score' => '9.84',
+    'advisory_ref' => 'ICSA-24-102-07', 'risk_control' => 'OT firewall blocks 502',
+    'pc_risk_management' => 'Not managed', 'status' => 'Mitigating', 'owner' => 'D. Kusuma',
+    'recent_contact' => '  OEM service desk  ',
+    'identified_at' => '2026-01-10', 'due_at' => '2026-03-01',
+];
+$otRow = ot_fields($otBase);
+ck('OT fields trim the business location', $otRow['site'], 'Plant 1 · Line 3');
+ck('OT fields keep one CVSS decimal', $otRow['cvss_score'], '9.8');
+ck('OT fields keep the chosen status', $otRow['status'], 'Mitigating');
+ck('OT fields keep the PC risk level', $otRow['pc_risk_management'], 'Not managed');
+ck('OT fields trim the recent contact', $otRow['recent_contact'], 'OEM service desk');
+ck('OT fields derive the title from the vulnerability and target',
+    $otRow['title'], 'Unauthenticated / unencrypted protocol — PLC-1 · 10.0.0.5');
+ck('OT fields accept a complete finding', ot_fields_error($otRow), null);
+
+ck('OT fields accept a typed vulnerability',
+    ot_fields(['category' => OT_OTHER, 'category_other' => '  Unsafe robot teach pendant  '] + $otBase)['category'],
+    'Unsafe robot teach pendant');
+ck('OT fields accept a typed business location',
+    ot_fields(['site' => OT_OTHER, 'site_other' => '  Plant 9 · Line 9 '] + $otBase)['site'], 'Plant 9 · Line 9');
+ck('OT fields ignore the typed box when a catalogue value is picked',
+    ot_fields(['category' => 'End-of-life OS / firmware', 'category_other' => 'ignored'] + $otBase)['category'],
+    'End-of-life OS / firmware');
+ck('OT fields keep the stored category on a tampered edit',
+    ot_fields(['category' => 'Bogus'], ['category' => 'Other'])['category'], 'Other');
+ck('OT fields keep the stored location on an empty edit', ot_fields([], ['site' => 'Plant 2'])['site'], 'Plant 2');
+ck('OT fields clamp CVSS to 10', ot_fields(['cvss_score' => '12'] + $otBase)['cvss_score'], null);
+ck('OT fields reject a non-numeric CVSS', ot_fields(['cvss_score' => 'high'] + $otBase)['cvss_score'], null);
+ck('OT fields fall back on an unknown status', ot_fields(['status' => 'Closed'] + $otBase)['status'], 'Open');
+ck('OT fields fall back on an unknown severity', ot_fields(['severity' => 'Urgent'] + $otBase)['severity'], 'Medium');
+ck('OT fields keep the stored status on an edit', ot_fields(['status' => 'Closed'], ['status' => 'Accepted'])['status'], 'Accepted');
+ck('OT fields default the report confirmation date to today',
+    ot_fields(['identified_at' => 'junk'] + $otBase)['identified_at'], date('Y-m-d'));
+ck('OT fields reject a blank business location',
+    ot_fields_error(ot_fields(['site' => '  '] + $otBase)), 'Choose or enter the business location.');
+ck('OT fields reject a blank vulnerability',
+    ot_fields_error(ot_fields(['category' => '', 'site' => 'Plant 1'])), 'Choose or enter the vulnerability type.');
+ck('OT fields reject a due date before the report date',
+    ot_fields_error(ot_fields(['identified_at' => '2026-05-01', 'due_at' => '2026-04-01'] + $otBase)) !== null, true);
+ck('OT fields accept no due date', ot_fields_error(ot_fields(['due_at' => ''] + $otBase)), null);
+
+ck('OT register permission exists', isset(permission_list()['page.ot']), true);
+ck('OT manage permission exists', isset(permission_list()['ot.manage']), true);
+foreach (['manager', 'analyst'] as $role) {
+    ck($role . ' may read the OT register', in_array('page.ot', role_list()[$role]['perms'], true), true);
+    ck($role . ' may record OT findings', in_array('ot.manage', role_list()[$role]['perms'], true), true);
+}
+ck('viewer may read the OT register', in_array('page.ot', role_list()['viewer']['perms'], true), true);
+ck('viewer may not record OT findings', in_array('ot.manage', role_list()['viewer']['perms'], true), false);
+ck('OT finding creation is a labelled audit event', audit_action_label('otv.create'), 'OT finding added');
+ck('OT finding update is a labelled audit event', audit_action_label('otv.update'), 'OT finding updated');
+ck('the schema ships the OT register', str_contains($schemaSql, '`ot_vulnerabilities`'), true);
+ck('the schema keeps the PC risk assessment', str_contains($schemaSql, '`pc_risk_management`'), true);
+ck('the schema keeps the recent contact', str_contains($schemaSql, '`recent_contact`'), true);
+ck('the OT audit entity links to the register', audit_record_url(['entity' => 'ot_vulnerability', 'entity_id' => 3]), '?page=ot');
+
 /* -------------------------------------------------------------- client IP */
 
 ck('cidr /8 matches', ip_matches_cidr('10.120.10.10', '10.0.0.0/8'), true);

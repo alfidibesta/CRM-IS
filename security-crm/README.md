@@ -4,8 +4,9 @@ Information-security work management for a manufacturing plant: an overview
 dashboard, an SOP/Policy library, a drag-and-drop workflow board, a detailed
 **issue report** page (categories and tags, evidence uploads, suspect records,
 risk scoring, activity log, Word export), a **form template library** (NDA,
-agreements and other controlled forms, downloadable as real `.docx` files) and
-an **EDLP exception register** for time-bound deviations.
+agreements and other controlled forms, downloadable as real `.docx` files),
+an **EDLP exception register** for time-bound deviations and an **OT
+vulnerability register** for process-control findings.
 
 Every issue report can follow a form template: pick the form, and the export is
 filled with that issue's own data. The layout can also be adjusted per report.
@@ -53,9 +54,9 @@ above always works.
 ### 4. Let the first request build the database
 
 Nothing to import. On the first page load the app connects as `root` (Laragon's
-default, empty password), creates the `security_crm` database and its **fourteen
+default, empty password), creates the `security_crm` database and its **sixteen
 tables**, then seeds sample data — SOPs, 12 issues, 12 templates, 10 EDLP
-exceptions — plus the four demo accounts below. The sign-in page appears once
+exceptions, 8 OT findings — plus the four demo accounts below. The sign-in page appears once
 that second or two of setup finishes.
 
 Prefer phpMyAdmin? Import `schema.sql` first; the app still seeds any table that
@@ -205,6 +206,11 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
   categories. Extending the period is a **renewal** (managers and administrators)
   that records the approver, the moment and the reason, and the compensating
   control keeps its own verification date, note and verifier.
+- **OT vulnerabilities** — process-control findings with the site and asset
+  they affect, category, severity and CVSS score, the risk control in force, a
+  recommendation, how the PC risk is managed (managed / partially managed / not
+  managed), status, owner and remediation due date; an open finding past its due
+  date reads **Overdue**.
 - **Notifications** — assignment, critical issue, due date, expiring exception
   and SOP review alerts, deduped per day, with unread/all filters.
 - **Audit trail and system log** — every action recorded and exportable as CSV,
@@ -232,6 +238,11 @@ evidence, tasks, activity and sign-off as annexes.
 and compensating control. The state follows the dates; categories can be added,
 renamed (records follow), restyled or deleted when unused.
 
+**Track OT findings.** *OT Vulnerabilities* -> add the site, asset, category,
+severity and CVSS score, the control in force, the recommendation, how the PC
+risk is managed and the remediation due date. The state follows the status and
+the due date; the category, state and site filters narrow the list.
+
 **Keep documents current.** *SOP & Policy* lists every controlled document with
 version, status and review date; dashboard stats and alerts flag reviews that
 are due.
@@ -252,6 +263,17 @@ give each existing document a baseline revision; nothing else changes.
 
 Build `20261125` renames `exceptions.system` to `exceptions.source_system`; the
 column is renamed in place on the next request, so existing values are kept.
+
+Build `20261127` adds the OT vulnerability register (`ot_vulnerabilities`,
+permissions `page.ot` and `ot.manage`). The table is created and seeded on the
+next request; no existing table or column changes.
+
+Build `20261128` reshapes that register into the shop-floor registration sheet:
+business location, vulnerability, importance, report confirmation date, target
+facilities and systems, and remarks, with a recent-contact column and
+"Other (direct input)" on the location and vulnerability catalogues. Only
+`recent_contact` is added; earlier category values are mapped to the new
+vulnerability types so no row is lost.
 
 Build `20261126` adds the exception renewal path: `renewed_at`, `renewed_by`,
 `renewal_note`, `control_verified_at`, `control_verified_by` and
@@ -299,6 +321,7 @@ and now show their raw action key (for example `cctv.prune`).
 | `?page=templates` | Form template library — NDA, supplier & manufacturing agreement, visitor undertaking, incident report, audit checklist… filter, search, one-click Word download |
 | `?page=template&id=N` | Fill in the placeholders, live document preview, download `.docx`, list of issue reports that use this form, edit the source (editors only) |
 | `?page=exceptions` | **EDLP exception register** — USB, websites, cameras, cloud apps…: adjustable categories, validity period with expiring/expired state, detail, justification, compensating control, category manager |
+| `?page=ot` | **OT vulnerability register** — daily FA monitoring: business location, vulnerability type (with *Other*), importance, report confirmation date, target facilities/systems, remarks, current status, recent contact, PC risk management, risk control, owner and due date |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
 | `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters and a CSV export |
 | `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and uncaught exceptions the browser never sees |
@@ -321,6 +344,8 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Acknowledge reading a policy or SOP | ✓ | ✓ | ✓ | ✓ |
 | See who has read a document revision | ✓ | ✓ | — | — |
 | Add / edit / delete EDLP exceptions | ✓ | ✓ | ✓ | — |
+| Read the OT vulnerability register | ✓ | ✓ | ✓ | ✓ |
+| Add / edit / delete OT vulnerabilities | ✓ | ✓ | ✓ | — |
 | Approve a renewal / verify a compensating control | ✓ | ✓ | — | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |
@@ -373,6 +398,25 @@ revoked exception cannot be renewed, and the new end must be in the future. The
 compensating control carries `control_verified_at`, `control_verified_by` and
 `control_verified_note`, so "the control is still in force" is a dated record
 rather than an assumption.
+
+**OT vulnerabilities.** `?page=ot` is the daily register for factory-automation
+weaknesses — the process-control findings that cannot be patched like an office
+PC. The registration sheet follows the shop floor: **business location**
+(required), **vulnerability** type (unpatched CVE/firmware, end-of-life
+OS/firmware, default or weak credentials, unauthenticated/unencrypted protocol,
+missing segmentation, remote/vendor access, missing hardening, weak backup,
+physical/USB), **importance**, **report confirmation date**, **target facilities
+and systems**, and **remarks**. Both catalogues end with **Other (direct
+input)**. The same form keeps the current status, remediation due date, PC risk
+management (`Managed`, `Partially managed`, `Not managed`), recent contact,
+owner, optional CVSS score with advisory reference (`ICSA-24-102-07`), the
+**risk control** that holds the risk down while the fix waits and a
+**recommendation**. The list shows report date, business site, vulnerability,
+target facilities, importance, current status, recent contact and the
+management actions. State is derived: **Open**, **Mitigating**, **Overdue** (an
+open finding past its due date), **Risk accepted** and **Resolved**. The stat
+cards count open findings, open critical/high ones, overdue remediation and open
+findings whose PC risk is not managed.
 
 ## Themes, density and panels
 

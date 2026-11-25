@@ -65,6 +65,9 @@ function audit_actions(): array
         'exception.category.create' => ['Category added', 'neutral'],
         'exception.category.update' => ['Category saved', 'neutral'],
         'exception.category.delete' => ['Category deleted', 'neutral'],
+        'otv.create'   => ['OT finding added', 'orange'],
+        'otv.update'   => ['OT finding updated', 'orange'],
+        'otv.delete'   => ['OT finding deleted', 'red'],
         'user.create'  => ['User created', 'red'],
         'user.update'  => ['User updated', 'red'],
         'user.delete'  => ['User deleted', 'red'],
@@ -97,6 +100,7 @@ function audit_entities(): array
         'template'           => 'Template',
         'exception'          => 'Exception',
         'exception_category' => 'Exception category',
+        'ot_vulnerability'   => 'OT vulnerability',
         'user'               => 'User',
     ];
 }
@@ -125,6 +129,8 @@ function audit_record_url(array $row): string
         case 'exception':
         case 'exception_category':
             return '?page=exceptions';
+        case 'ot_vulnerability':
+            return '?page=ot';
         case 'task':
             return '?page=workflow';
         default:

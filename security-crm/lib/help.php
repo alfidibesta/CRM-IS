@@ -108,6 +108,18 @@ function help_topics(): array
             'tip' => 'Renew before the period ends: an extension recorded on the last day, with a fresh control verification, is the easiest audit answer.',
         ],
 
+        'ot' => [
+            'title'   => 'OT vulnerabilities',
+            'summary' => 'Daily monitoring of factory-automation weaknesses — PLC, HMI, SCADA and the network between them — by business location, vulnerability, importance and target facilities.',
+            'steps'   => [
+                'Filter by business location, vulnerability type or current status, or search the vulnerability, facility and recent contact.',
+                '"Vulnerability registration" records the business location, vulnerability, importance, report confirmation date, target facilities/systems and remarks. Both catalogues end with "Other (direct input)".',
+                'Open "Monitoring and management" for the status, remediation due date, PC risk management, recent contact, owner, CVSS and risk control.',
+                'Expand a row for the remarks, control and recommendation; Edit opens the full form and the delete button.',
+            ],
+            'tip' => 'Give a finding a due date even when the fix waits for a shutdown: an open finding past its due date reads Overdue, which is what the review meeting asks about.',
+        ],
+
         'audit' => [
             'title'   => 'Audit trail',
             'summary' => 'Every recorded action, with who did it, from where and what changed — the evidence trail for ISO 27001.',

@@ -223,7 +223,29 @@
     });
   });
 
+  /* ------------------------------- catalogue "Other (direct input)" fields */
+
+  // A catalogue dropdown can end with "Other (direct input)". The companion
+  // text input is disabled until that option is chosen, so a normal submit
+  // never carries two locations or two vulnerability types.
+  function syncOther(select) {
+    var input = doc.getElementById(select.getAttribute('data-other') || '');
+    if (!input) return;
+    var on = select.value === '__other';
+    input.hidden = !on;
+    input.disabled = !on;
+    return on ? input : null;
+  }
+
+  doc.querySelectorAll('select[data-other]').forEach(syncOther);
+
   doc.addEventListener('change', function (e) {
+    var other = e.target.closest('select[data-other]');
+    if (other) {
+      var box = syncOther(other);
+      if (box) box.focus();
+    }
+
     var select = e.target.closest('select[data-autosubmit]');
     if (!select || !select.form) return;
     if (isOffline()) {

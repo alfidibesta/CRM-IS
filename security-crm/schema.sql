@@ -2,7 +2,7 @@
 -- Generated from a freshly seeded install. The app also creates and upgrades
 -- every table by itself on the first request, so importing this file is optional.
 --
--- Tables: audit_log, exceptions, exception_categories, issues, issue_events, issue_files, login_attempts, notifications, schema_meta, sop_acknowledgements, sop_revisions, sops, suspects, tasks, templates, users
+-- Tables: audit_log, exceptions, exception_categories, issues, issue_events, issue_files, login_attempts, notifications, ot_vulnerabilities, schema_meta, sop_acknowledgements, sop_revisions, sops, suspects, tasks, templates, users
 -- Demo sign-in: admin / Admin@123 (see README.md for the other roles).
 
 CREATE DATABASE IF NOT EXISTS `security_crm` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -91,6 +91,38 @@ CREATE TABLE `exceptions` (
   KEY `idx_exc_status` (`status`),
   KEY `idx_exc_category` (`category`)
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `ot_vulnerabilities`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `ot_vulnerabilities` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `code` varchar(20) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `site` varchar(120) NOT NULL DEFAULT '',
+  `asset` varchar(180) NOT NULL DEFAULT '',
+  `category` varchar(60) NOT NULL DEFAULT '',
+  `severity` enum('Critical','High','Medium','Low') NOT NULL DEFAULT 'Medium',
+  `cvss_score` decimal(3,1) DEFAULT NULL,
+  `advisory_ref` varchar(60) NOT NULL DEFAULT '',
+  `detail` text DEFAULT NULL,
+  `risk_control` varchar(255) NOT NULL DEFAULT '',
+  `recommendation` text DEFAULT NULL,
+  `pc_risk_management` enum('Managed','Partially managed','Not managed') NOT NULL DEFAULT 'Partially managed',
+  `status` enum('Open','Mitigating','Accepted','Resolved') NOT NULL DEFAULT 'Open',
+  `owner` varchar(100) NOT NULL DEFAULT '',
+  `recent_contact` varchar(120) NOT NULL DEFAULT '',
+  `identified_at` date DEFAULT NULL,
+  `due_at` date DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`),
+  KEY `idx_otv_due` (`due_at`),
+  KEY `idx_otv_status` (`status`),
+  KEY `idx_otv_severity` (`severity`),
+  KEY `idx_otv_site` (`site`)
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `issue_events`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

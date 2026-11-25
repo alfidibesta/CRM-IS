@@ -13,7 +13,7 @@ declare(strict_types=1);
  * Bump when the DDL below or the upgrade path changes: migrate() then runs
  * once on the next request instead of on every single one.
  */
-const SCHEMA_VERSION = 20261126;
+const SCHEMA_VERSION = 20261128;
 
 function db(array $cfg): PDO
 {
@@ -328,6 +328,33 @@ CREATE TABLE IF NOT EXISTS exceptions (
     INDEX idx_exc_category (category)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS ot_vulnerabilities (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    code          VARCHAR(20)  NOT NULL UNIQUE,
+    title         VARCHAR(200) NOT NULL,
+    site          VARCHAR(120) NOT NULL DEFAULT '',
+    asset         VARCHAR(180) NOT NULL DEFAULT '',
+    category      VARCHAR(60)  NOT NULL DEFAULT '',
+    severity      ENUM('Critical','High','Medium','Low') NOT NULL DEFAULT 'Medium',
+    cvss_score    DECIMAL(3,1) NULL,
+    advisory_ref  VARCHAR(60)  NOT NULL DEFAULT '',
+    detail        TEXT NULL,
+    risk_control  VARCHAR(255) NOT NULL DEFAULT '',
+    recommendation TEXT NULL,
+    pc_risk_management ENUM('Managed','Partially managed','Not managed') NOT NULL DEFAULT 'Partially managed',
+    status        ENUM('Open','Mitigating','Accepted','Resolved') NOT NULL DEFAULT 'Open',
+    owner         VARCHAR(100) NOT NULL DEFAULT '',
+    recent_contact VARCHAR(120) NOT NULL DEFAULT '',
+    identified_at DATE NULL,
+    due_at        DATE NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_otv_due (due_at),
+    INDEX idx_otv_status (status),
+    INDEX idx_otv_severity (severity),
+    INDEX idx_otv_site (site)
+) ENGINE=InnoDB;
+
 SQL;
 
     // One exec() per statement: multi-statement queries are not portable
@@ -357,6 +384,33 @@ SQL;
         'report_body'       => 'MEDIUMTEXT NULL',
     ]);
     ensure_columns($pdo, 'sops', ['content' => 'TEXT NULL']);
+
+    // Build 20261128: the OT register now follows the registration form used on
+    // the shop floor — business location, vulnerability type, importance, report
+    // confirmation date, target facilities and recent contact. Only the contact
+    // column is new; the rest of the form maps onto columns that already exist.
+    ensure_columns($pdo, 'ot_vulnerabilities', [
+        'recent_contact' => "VARCHAR(120) NOT NULL DEFAULT ''",
+    ]);
+
+    // The "Vulnerabilities" catalogue moved from OT asset classes to weakness
+    // types: map the values earlier builds seeded so old rows keep their chip
+    // and their tone instead of falling through to a neutral label.
+    $otCategoryMap = [
+        'PLC / RTU'               => 'Unauthenticated / unencrypted protocol',
+        'HMI / SCADA'             => 'End-of-life OS / firmware',
+        'Engineering workstation' => 'Missing hardening / baseline',
+        'Network / Switch'        => 'Missing network segmentation',
+        'Historian / MES'         => 'Missing network segmentation',
+        'Wireless / Cellular'     => 'Remote / vendor access exposure',
+        'Firmware'                => 'Unpatched CVE / vulnerable firmware',
+        'Remote access'           => 'Remote / vendor access exposure',
+        'Other OT asset'          => 'Other',
+    ];
+    $mapCategory = $pdo->prepare('UPDATE ot_vulnerabilities SET category = ? WHERE category = ?');
+    foreach ($otCategoryMap as $from => $to) {
+        $mapCategory->execute([$to, $from]);
+    }
 
     // Same upgrade path for indexes: new installs get them from the DDL above,
     // older ones are added once here (guarded by SCHEMA_VERSION).
@@ -477,6 +531,7 @@ function seedIfEmpty(PDO $pdo): void
             (SELECT COUNT(*) FROM issues WHERE tags <> \'\' OR report_template_id IS NOT NULL) AS issue_extras,
             (SELECT COUNT(*) FROM exception_categories) AS categories,
             (SELECT COUNT(*) FROM exceptions)           AS exceptions,
+            (SELECT COUNT(*) FROM ot_vulnerabilities)   AS ot_vulnerabilities,
             (SELECT COUNT(*) FROM suspects)             AS suspects,
             (SELECT COUNT(*) FROM issue_events)         AS events,
             (SELECT COUNT(*) FROM audit_log)            AS audit,
@@ -491,6 +546,7 @@ function seedIfEmpty(PDO $pdo): void
     if ($empty('templates'))   { seed_templates($pdo); }
     if ($empty('issue_extras')) { seed_issue_extras($pdo); }
     if ($empty('exceptions') || $empty('categories')) { seed_exceptions($pdo); }
+    if ($empty('ot_vulnerabilities')) { seed_ot_vulnerabilities($pdo); }
     if ($empty('suspects') || $empty('events')) { seed_activity($pdo); }
     if ($empty('audit'))       { seed_audit($pdo); if (function_exists('audit_seal_pending')) { audit_seal_pending($pdo); } }
     if ($empty('notifications')) { seed_notifications($pdo); }
@@ -991,6 +1047,94 @@ function seed_exceptions(PDO $pdo): void
     $st = $pdo->prepare('INSERT INTO exceptions
         (code,title,source_system,category,target,detail,justification,control,period_start,period_end,status,risk_level,owner,approved_by,ref_no)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    foreach ($rows as $r) {
+        $st->execute($r);
+    }
+}
+
+/* ------------------------------------------------- OT vulnerabilities */
+
+/**
+ * OT findings across the plant: one of each state so the register, its
+ * filters and the overdue counter all have something to show.
+ */
+function seed_ot_vulnerabilities(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM ot_vulnerabilities')->fetchColumn() > 0) {
+        return;
+    }
+
+    $day = fn(int $offset): string => date('Y-m-d', (int) strtotime(($offset >= 0 ? '+' : '') . $offset . ' days'));
+
+    $rows = [
+        ['OTV-001', 'Unauthenticated / unencrypted protocol — Line 3 PLC',
+            'Plant 1 · Line 3 (packaging)', 'PLC-S7-315 · 10.30.3.11',
+            'Unauthenticated / unencrypted protocol', 'Critical', '9.8', 'ICSA-24-102-07',
+            "The S7-315 on Line 3 accepts Modbus/TCP writes without authentication, and the segment is reachable from the office VLAN through a misconfigured route.\nAn attacker who can reach the PLC can stop the line or alter recipe values.",
+            'OT firewall blocks 502 from the office VLAN; write access limited to the cell HMI.',
+            'Remove the office-to-OT route, restrict function code 5/6/15/16 at the firewall and schedule a PLC firmware review with the vendor before the next shutdown window.',
+            'Not managed', 'Mitigating', 'D. Kusuma', $day(-40), $day(10), 'Line 3 automation engineer · vendor ticket #4412'],
+
+        ['OTV-002', 'End-of-life OS / firmware — Line 1 HMI panel',
+            'Plant 1 · Line 1 (mixing)', 'HMI-L1-OP07 · 10.30.1.17',
+            'End-of-life OS / firmware', 'High', '8.1', 'ICSA-23-180-03',
+            "The operator panel on Line 1 still runs a Windows build out of vendor support. The patch is only available in a full image upgrade the OEM must install.\nThe panel is on the OT VLAN with no internet access and a locked-down user account.",
+            'USB ports blocked, auto-login disabled, host firewall limited to the SCADA server.',
+            'Book the OEM image upgrade for the Q2 shutdown; until then keep the USB block enforced and review the panel accounts each quarter.',
+            'Partially managed', 'Open', 'B. Saputra', $day(-120), $day(35), 'OEM service desk · image order pending'],
+
+        ['OTV-003', 'Default or weak credentials — SCADA application server',
+            'Plant 1 · Utility room', 'SCADA-APP-01 · 10.30.0.9',
+            'Default or weak credentials', 'High', '7.5', '',
+            "Four engineers sign in to the SCADA application server with the same account, so the audit trail cannot name who changed a setpoint.",
+            'Server room is badge-controlled; the account password is rotated when someone leaves.',
+            'Create named domain accounts, grant the SCADA role individually and set the shared account to expire once every engineer has their own.',
+            'Managed', 'Open', 'S. Wijaya', $day(-25), $day(-3), 'IT identity team · change request CHG-2291'],
+
+        ['OTV-004', 'Missing hardening / baseline — engineering workstation',
+            'Plant 1 · Automation office', 'ENG-WS-04 · 10.30.5.24',
+            'Missing hardening / baseline', 'Medium', '6.5', '',
+            "The workstation that holds the PLC project files still has SMBv1 enabled for an old project archive share.",
+            'Workstation sits on a management VLAN, host firewall allows only the archive server.',
+            'Move the archive to a supported share and disable SMBv1 at the next patch window.',
+            'Managed', 'Mitigating', 'A. Pratama', $day(-15), $day(21), 'Automation office · rebuild booked for the patch window'],
+
+        ['OTV-005', 'Missing network segmentation — Line 2 historian link',
+            'Plant 1 · Line 2 (coating)', 'SW-L2-U03 (unmanaged, no IP) · historian drop',
+            'Missing network segmentation', 'Medium', '5.9', '',
+            "An unmanaged switch joins the Line 2 cell network to the historian segment, bypassing the OT firewall rule set and leaving no port-level record.",
+            'Physical access to the cabinet is locked; the cable is documented on the as-built drawing.',
+            'Replace the switch with a managed unit in the next cabinet build and move the historian link behind the OT firewall.',
+            'Partially managed', 'Open', 'D. Kusuma', $day(-60), $day(45), 'Network team · cabinet rebuild scheduled'],
+
+        ['OTV-006', 'Missing network segmentation — historian SQL service',
+            'Plant 1 · Server room', 'HIST-DB-01 · 10.30.0.21',
+            'Missing network segmentation', 'High', '8.2', '',
+            "The historian database listens on 1433 and the office subnet can reach it, though only the MES service account should.",
+            'Database firewall allows only the MES application server and two reporting hosts.',
+            'Close the office-to-historian rule at the core firewall and confirm with a scan from an office host.',
+            'Managed', 'Resolved', 'A. Pratama', $day(-90), $day(-20), 'MES team · rule closed and rescanned'],
+
+        ['OTV-007', 'Default or weak credentials — remote pump house router',
+            'Pump house · north yard', 'RT-GW-N01 · 10.40.7.1',
+            'Default or weak credentials', 'Critical', '9.1', 'ICSA-22-349-01',
+            "The cellular router that provides the vendor support tunnel still answers on the default administrative password; the vendor installed it and never changed it.",
+            'Tunnel is only opened for a booked support session; the router sits in a locked cabinet.',
+            'Change the administrative password, disable WAN-side administration and log every tunnel session with the vendor.',
+            'Not managed', 'Open', 'S. Wijaya', $day(-7), $day(5), 'Vendor support · tunnel session booked'],
+
+        ['OTV-008', 'Unpatched CVE / vulnerable firmware — Cell 4 vision controller',
+            'Plant 2 · Line 4 (vision)', 'Cell 4 vision controller · 10.31.4.8',
+            'Unpatched CVE / vulnerable firmware', 'Low', '3.7', '',
+            "The Cell 4 controller still speaks an older CIP dialect that the OT firewall passes without deep inspection, so malformed packets reach the controller.",
+            'Controller firmware is signed and the cell is physically isolated during non-production hours.',
+            'Accepted for the remaining life of the cell; revisit when the vision system is replaced next year.',
+            'Partially managed', 'Accepted', 'B. Saputra', $day(-200), null, 'Cell 4 integrator · revisit at replacement'],
+    ];
+
+    $st = $pdo->prepare('INSERT INTO ot_vulnerabilities
+        (code,title,site,asset,category,severity,cvss_score,advisory_ref,detail,risk_control,recommendation,pc_risk_management,status,owner,identified_at,due_at,recent_contact)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     foreach ($rows as $r) {
         $st->execute($r);
     }

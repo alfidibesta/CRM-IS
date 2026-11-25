@@ -288,6 +288,36 @@ ul, ol { padding: 0; list-style: none; }
   color: var(--ink);
 }
 .search input:focus { outline: 2px solid var(--blue-soft); border-color: var(--blue); }
+.search select {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  max-width: 220px;
+  color: var(--ink);
+}
+.search select:focus { outline: 2px solid var(--blue-soft); border-color: var(--blue); }
+
+/* OT register: the control column is prose, so keep one row from stretching. */
+.cell-control { max-width: 230px; }
+.cell-control span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* OT register: registration sheet inside a flush list card. */
+.card__head--pad { padding: 14px 14px 0; }
+.card--flush > .toolbar { padding: 8px 14px; margin: 0; border-bottom: 1px solid var(--line-2); }
+.card--flush > .toolbar:first-of-type { padding-top: 12px; }
+.search--inline { display: inline-flex; }
+.field input.field__other { border-color: var(--orange); background: var(--orange-soft); }
+.cell-sub { display: block; font-size: 10.5px; margin-top: 2px; }
+.panel--inner { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.table--ot { min-width: 960px; }
 
 /* -------------------------------------------------------------- table */
 
