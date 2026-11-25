@@ -1310,7 +1310,9 @@ if ($page === 'audit' && ($_GET['export'] ?? '') === 'csv') {
     header('X-Content-Type-Options: nosniff');
 
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['When', 'Actor', 'Role', 'Action', 'Record type', 'Record ID', 'Reference', 'Detail', 'IP', 'Client']);
+    // PHP 8.4 deprecates relying on the default $escape, so it is passed
+    // explicitly with that same default to keep the CSV bytes unchanged.
+    fputcsv($out, ['When', 'Actor', 'Role', 'Action', 'Record type', 'Record ID', 'Reference', 'Detail', 'IP', 'Client'], ',', '"', '\\');
     foreach ($rows as $r) {
         fputcsv($out, [
             $r['created_at'],
@@ -1323,7 +1325,7 @@ if ($page === 'audit' && ($_GET['export'] ?? '') === 'csv') {
             $r['detail'],
             $r['ip'],
             $r['agent'],
-        ]);
+        ], ',', '"', '\\');
     }
     fclose($out);
     exit;
