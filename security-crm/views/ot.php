@@ -372,12 +372,8 @@ function ot_url(array $over): string
         <td class="right">
           <?php if ($canManage): ?>
             <?php $panel = '?page=ot_panel&id=' . (int) $v['id']; ?>
-            <details class="detail detail--inline" data-lazy="<?= e($panel) ?>">
-              <summary class="btn btn--ghost btn--xs">Edit</summary>
-              <div class="detail__body detail__body--card detail__body--wide">
-                <p class="muted"><a href="<?= e($panel) ?>">Open the edit form</a></p>
-              </div>
-            </details>
+            <a class="btn btn--ghost btn--xs" href="<?= e($panel) ?>"
+               data-modal-url="<?= e($panel) ?>" data-modal-title="Edit <?= e($v['code']) ?>">Edit</a>
           <?php else: ?>
             <span class="muted">—</span>
           <?php endif; ?>

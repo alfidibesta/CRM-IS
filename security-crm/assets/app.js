@@ -1,10 +1,11 @@
 /* SecOps CRM — board drag & drop, confirmations, upload + risk widgets.
  *
  * One IIFE, delegated listeners: the board, the delete buttons, the
- * auto-submitting selects and every form are handled from four listeners on
- * the document instead of one per element. Drag-over is throttled to one
- * layout read per animation frame. Every write path checks the connection
- * first, because a failed POST cannot be queued safely (one-shot CSRF token).
+ * auto-submitting selects, the editing dialog and every form are handled from
+ * a few listeners on the document instead of one per element. Drag-over is
+ * throttled to one layout read per animation frame. Every write path checks
+ * the connection first, because a failed POST cannot be queued safely (one-shot
+ * CSRF token).
  */
 
 (function () {
@@ -380,39 +381,139 @@
     });
   });
 
-  /* -------------------------------- row panels, fetched when first opened */
+  /* ------------------------------------------------------ editing dialog */
 
-  // A register row ships a placeholder instead of its edit form; the form is
-  // asked for the first time the row is opened, and kept afterwards.
-  doc.addEventListener('toggle', function (e) {
-    var box = e.target;
-    if (!box || box.tagName !== 'DETAILS' || !box.open || !box.hasAttribute('data-lazy')) return;
-    if (box.getAttribute('data-lazy-loaded')) return;
+  // A register row's Edit button opens a dialog, not a panel below the row:
+  // the form sits centred over the page, so the table never moves and a long
+  // form scrolls inside the dialog instead of pushing the list down. The
+  // markup comes either from a panel URL (data-modal-url, fetched on demand)
+  // or from a hidden block already on the page (data-modal-node), so no form
+  // is duplicated and the trigger stays a plain link without JavaScript.
+  var modal, modalBody, modalTitle, modalTrigger, modalNode, modalHome;
 
-    var body = box.querySelector('.detail__body');
-    var url = box.getAttribute('data-lazy');
-    if (!body || !url) return;
+  function buildModal() {
+    if (modal) return modal;
 
-    if (isOffline()) {
-      markOffline();
-      body.innerHTML = '<p class="muted">Offline — the form was not loaded. Reconnect and try again.</p>';
+    modal = doc.createElement('div');
+    modal.className = 'modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">'
+      + '<header class="modal__head">'
+      + '<h2 class="modal__title" id="modal-title"></h2>'
+      + '<button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>'
+      + '</header>'
+      + '<div class="modal__body"></div>'
+      + '</div>';
+    doc.body.appendChild(modal);
+
+    modalBody = modal.querySelector('.modal__body');
+    modalTitle = modal.querySelector('.modal__title');
+
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal || e.target.closest('[data-modal-close]')) closeModal();
+    });
+
+    // Keep Tab inside the dialog: a modal that lets focus escape to the page
+    // behind it is worse than no modal at all.
+    modal.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') return;
+      var items = Array.prototype.filter.call(
+        modal.querySelectorAll('a[href], button:not([disabled]), input:not([type=hidden]):not([disabled]),'
+          + ' select:not([disabled]), textarea:not([disabled])'),
+        function (el) { return el.offsetParent !== null; }
+      );
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    return modal;
+  }
+
+  function focusFirstField() {
+    var first = modalBody.querySelector(
+      'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+    );
+    if (first) first.focus({ preventScroll: true });
+    else modal.querySelector('[data-modal-close]').focus();
+  }
+
+  function closeModal(silent) {
+    if (!modal || modal.hidden) return;
+    modal.hidden = true;
+    doc.documentElement.classList.remove('is-modal');
+    modalBody.innerHTML = '';
+
+    // A form borrowed from the page goes back where it came from, so the row's
+    // next open shows the same markup and the page is unchanged afterwards.
+    if (modalNode && modalHome && modalHome.parentNode) {
+      modalHome.parentNode.insertBefore(modalNode, modalHome);
+      modalHome.parentNode.removeChild(modalHome);
+      modalNode.hidden = true;
+    }
+    modalNode = modalHome = null;
+
+    var trigger = modalTrigger;
+    modalTrigger = null;
+    if (!silent && trigger) trigger.focus();
+  }
+
+  function openModal(trigger) {
+    buildModal();
+    closeModal(true);
+
+    modalTrigger = trigger;
+    modalTitle.textContent = trigger.getAttribute('data-modal-title') || 'Edit';
+    modal.hidden = false;
+    doc.documentElement.classList.add('is-modal');
+
+    var nodeId = trigger.getAttribute('data-modal-node');
+    var url = trigger.getAttribute('data-modal-url');
+
+    if (nodeId) {
+      var src = doc.getElementById(nodeId);
+      if (!src) { closeModal(); return; }
+      modalNode = src;
+      modalHome = doc.createComment('modal-node');
+      src.parentNode.insertBefore(modalHome, src);
+      src.hidden = false;
+      modalBody.appendChild(src);
+      modal.classList.add('modal--wide');
+      focusFirstField();
       return;
     }
 
-    box.setAttribute('data-lazy-loaded', '1');
-    body.innerHTML = '<p class="muted">Loading…</p>';
+    modal.classList.remove('modal--wide');
+    modalBody.innerHTML = '<p class="muted">Loading the form…</p>';
 
     fetch(url, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
       .then(function (html) {
-        body.innerHTML = html;
-        // The form was replaced under the pointer: keep the panel on screen.
-        body.scrollIntoView({ block: 'nearest' });
+        if (modalTrigger !== trigger) return; // closed while it was loading
+        modalBody.innerHTML = html;
+        focusFirstField();
       })
       .catch(function (err) {
-        box.removeAttribute('data-lazy-loaded');
-        body.innerHTML = '<p class="muted">Could not load that form — reload the page and try again.</p>';
+        if (modalTrigger !== trigger) return;
+        modalBody.innerHTML = '<p class="muted">Could not load that form. '
+          + '<a class="link" href="' + url + '">Open it on its own page</a>, or reload and try again.</p>';
         if (err instanceof TypeError) markOffline();
       });
-  }, true);
+  }
+
+  doc.addEventListener('click', function (e) {
+    var trigger = e.target.closest('[data-modal-url], [data-modal-node]');
+    if (!trigger) return;
+    e.preventDefault();
+    openModal(trigger);
+  });
+
+  doc.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal && !modal.hidden) {
+      e.preventDefault();
+      closeModal();
+    }
+  });
 })();

@@ -2,8 +2,8 @@
 /**
  * One OT finding's edit panel, fetched on demand.
  *
- * app.js requests this fragment when a register row's Edit button opens, so the
- * register ships one small placeholder per row instead of a full form. The
+ * app.js requests this fragment into the editing dialog when a register row's
+ * Edit button opens, so the register ships no form per row. The
  * fields are the registration form's fields, including the two catalogues that
  * offer "Other (direct input)". Same permission and the same CSRF field as the
  * page that hosts it.

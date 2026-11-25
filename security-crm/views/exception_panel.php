@@ -2,10 +2,10 @@
 /**
  * One panel of the EDLP register, fetched on demand.
  *
- * app.js requests this fragment when a row's Edit (or a category's Adjust)
- * button is opened, so the register page itself ships one small placeholder
- * per row instead of a complete edit form. Same permissions and the same CSRF
- * field as the page that hosts it.
+ * app.js requests this fragment into the editing dialog when a row's Edit (or
+ * a category's Adjust) button is opened, so the register page itself ships no
+ * edit form per row. Same permissions and the same CSRF field as the page that
+ * hosts it.
  *
  *   ?page=exception_panel&what=exception&id=12
  *   ?page=exception_panel&what=category&id=3

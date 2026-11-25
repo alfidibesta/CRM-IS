@@ -1226,8 +1226,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $page = (string) ($_GET['page'] ?? 'dashboard');
 
-/* A lazily loaded panel: app.js fetches one when a register row's Edit button
-   opens, so the page itself ships a placeholder instead of a form per row. */
+/* A lazily loaded panel: app.js fetches one into the editing dialog when a
+   register row's Edit button opens, so the page ships no form per row. */
 if ($page === 'exception_panel') {
     if (!is_logged_in()) {
         http_response_code(401);

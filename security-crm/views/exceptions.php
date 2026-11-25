@@ -280,12 +280,8 @@ function exc_url(array $over): string
         <td class="right">
           <?php if ($canManage): ?>
             <?php $panel = '?page=exception_panel&what=exception&id=' . (int) $e['id']; ?>
-            <details class="detail detail--inline" data-lazy="<?= e($panel) ?>">
-              <summary class="btn btn--ghost btn--xs">Edit</summary>
-              <div class="detail__body detail__body--card detail__body--wide">
-                <p class="muted"><a href="<?= e($panel) ?>">Open the edit form</a></p>
-              </div>
-            </details>
+            <a class="btn btn--ghost btn--xs" href="<?= e($panel) ?>"
+               data-modal-url="<?= e($panel) ?>" data-modal-title="Edit <?= e($e['code']) ?>">Edit</a>
           <?php else: ?>
             <span class="muted">—</span>
           <?php endif; ?>
@@ -326,12 +322,8 @@ function exc_url(array $over): string
             <td class="right">
               <?php if ($canCats): ?>
                 <?php $panel = '?page=exception_panel&what=category&id=' . (int) $c['id']; ?>
-                <details class="detail detail--inline" data-lazy="<?= e($panel) ?>">
-                  <summary class="btn btn--ghost btn--xs">Adjust</summary>
-                  <div class="detail__body detail__body--card">
-                    <p class="muted"><a href="<?= e($panel) ?>">Open the category form</a></p>
-                  </div>
-                </details>
+                <a class="btn btn--ghost btn--xs" href="<?= e($panel) ?>"
+                   data-modal-url="<?= e($panel) ?>" data-modal-title="Adjust <?= e($c['name']) ?>">Adjust</a>
               <?php else: ?>
                 <span class="muted">—</span>
               <?php endif; ?>

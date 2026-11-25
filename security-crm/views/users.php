@@ -89,9 +89,10 @@ $stats = [
             <td class="nowrap"><?= $u['last_login'] ? date('d M Y · H:i', strtotime((string) $u['last_login'])) : 'never' ?></td>
             <td class="right">
               <?php if ($canManage): ?>
-                <details class="detail detail--inline">
-                  <summary class="btn btn--ghost btn--xs">Edit</summary>
-                  <div class="detail__body detail__body--card">
+                <a class="btn btn--ghost btn--xs" href="#"
+                   data-modal-node="user-edit-<?= (int) $u['id'] ?>"
+                   data-modal-title="Edit <?= e($u['username']) ?>">Edit</a>
+                <div class="modal-source" id="user-edit-<?= (int) $u['id'] ?>" hidden>
                     <form class="form form--sub" method="post" action="index.php">
                       <?= csrf_field() ?>
                       <input type="hidden" name="action" value="update_user">
@@ -135,8 +136,7 @@ $stats = [
                         <button type="submit" class="btn btn--ghost btn--sm">Delete user</button>
                       </form>
                     <?php endif; ?>
-                  </div>
-                </details>
+                </div>
               <?php else: ?>
                 <span class="muted">—</span>
               <?php endif; ?>
