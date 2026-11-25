@@ -317,7 +317,27 @@ ul, ol { padding: 0; list-style: none; }
 .field input.field__other { border-color: var(--orange); background: var(--orange-soft); }
 .cell-sub { display: block; font-size: 10.5px; margin-top: 2px; }
 .panel--inner { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.field--half { grid-column: span 2; }
+
+/* OT register: size the short columns to what they hold (date, location,
+   importance, status, contact, actions) so their headers stop stacking, and
+   let the two prose columns — weakness and target facility — take the rest. */
 .table--ot { min-width: 960px; }
+@media (min-width: 1280px) {
+  /* Wide enough for a fixed layout: pin the short columns and let weakness and
+     target facility share what is left, instead of the browser handing the
+     spare space to whichever cell happens to hold a long string. */
+  .table--ot { table-layout: fixed; }
+  .table--ot th:nth-child(1) { width: 130px; }
+  .table--ot th:nth-child(2) { width: 156px; }
+  .table--ot th:nth-child(5) { width: 104px; }
+  .table--ot th:nth-child(6) { width: 132px; }
+  .table--ot th:nth-child(7) { width: 140px; }
+  .table--ot th:nth-child(8) { width: 112px; }
+}
+/* A weakness chip wraps inside its column rather than running under the next
+   cell once the columns are pinned. */
+.table--ot .tag { white-space: normal; max-width: 100%; }
 
 /* -------------------------------------------------------------- table */
 
@@ -994,7 +1014,12 @@ ul, ol { padding: 0; list-style: none; }
 .detail__more { cursor: pointer; font-size: 11px; color: var(--blue); list-style: none; }
 .detail__more::-webkit-details-marker { display: none; }
 .detail__more:hover { text-decoration: underline; }
-.detail__body--wide { width: 440px; }
+/* The register's edit popover opens from the right-aligned actions cell and is
+   only 440px wide: keep its text left-aligned and its fields in two columns. */
+.detail__body--wide { width: 440px; text-align: left; }
+.detail__body--wide .form__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail__body--wide .field--wide { grid-column: span 2; }
+.detail__body--wide .field > span { white-space: normal; }
 
 /* ------------------------------------------------------------ utilities */
 
@@ -1076,7 +1101,7 @@ ul, ol { padding: 0; list-style: none; }
   .sidebar { width: 100%; flex: none; height: auto; position: static; }
   .grid--two { grid-template-columns: minmax(0, 1fr); }
   .form__grid, .form__grid--upload { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .field--wide { grid-column: span 2; }
+  .field--wide, .field--half { grid-column: span 2; }
   .board { grid-template-columns: minmax(0, 1fr); }
   .login { grid-template-columns: minmax(0, 1fr); }
   .login__brand { padding: 26px 22px; gap: 18px; }
@@ -1097,7 +1122,7 @@ ul, ol { padding: 0; list-style: none; }
   .nav__tags { padding: 0 2px; }
   .grid--stats--trio > .stat:last-child { grid-column: auto; }
   .form__grid { grid-template-columns: minmax(0, 1fr); }
-  .field--wide { grid-column: span 1; }
+  .field--wide, .field--half { grid-column: span 1; }
   .content { padding: 12px; }
   .topbar { padding: 12px 14px; }
 }

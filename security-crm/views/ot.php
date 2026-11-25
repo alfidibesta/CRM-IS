@@ -188,11 +188,11 @@ function ot_url(array $over): string
         <input type="date" name="identified_at" required value="<?= date('Y-m-d') ?>">
       </label>
 
-      <label class="field"><span>Target Facilities and Systems</span>
+      <label class="field field--half"><span>Target Facilities and Systems</span>
         <input type="text" name="asset" maxlength="180" placeholder="Example: Production line PLC (S7-315) · 10.30.3.11">
       </label>
 
-      <label class="field"><span>Remarks</span>
+      <label class="field field--half"><span>Remarks</span>
         <textarea name="detail" rows="2" placeholder="Additional checks"></textarea>
       </label>
     </div>
