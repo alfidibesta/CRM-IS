@@ -1443,7 +1443,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
 .filters > summary:hover { color: var(--ink); }
 .filters[open] > summary { border-bottom: 1px solid var(--line-2); }
 .filters__body { display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 12px; }
-.filters__state { margin-left: auto; font-weight: 400; font-size: 11.5px; color: var(--blue); }
 
 /* The second layer: hidden in Simple until its block is opened, and always
    present in Detailed and in the printed/exported markup. */
@@ -1517,7 +1516,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
 .statbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
   gap: 10px 26px;
   padding: 10px 16px;
   background: var(--card);
@@ -1532,14 +1530,12 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   border-left: 3px solid var(--line);
   background: none;
   box-shadow: none;
-  overflow: visible;
 }
 .statbar .stat::after { display: none; }
 .statbar .stat--blue { border-left-color: var(--blue); }
 .statbar .stat--red { border-left-color: var(--red); }
 .statbar .stat--orange { border-left-color: var(--orange); }
 .statbar .stat--neutral { border-left-color: var(--ink-3); }
-.statbar .stat__label { font-size: 10.5px; }
 .statbar .stat__value { font-size: 18px; margin-top: 1px; }
 .statbar .stat__hint { font-size: 11px; margin-top: 1px; }
 
@@ -1548,7 +1544,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
 .toolbar--filters {
   position: relative;
   justify-content: flex-start;
-  flex-wrap: wrap;
 }
 .toolbar--filters .search { flex: 1 1 260px; }
 .toolbar--filters .search input[type="search"] { flex: 1 1 auto; min-width: 0; }
@@ -1570,7 +1565,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   color: var(--ink-2);
 }
 .filters--pop > summary:hover { border-color: var(--ink-3); color: var(--ink); }
-.filters--pop > summary::before { content: "\2261"; color: var(--ink-3); font-weight: 700; }
 .filters--pop[open] > summary { border-color: var(--ink); color: var(--ink); }
 .filters--pop > .filters__body {
   position: absolute;
@@ -1578,7 +1572,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   right: 0;
   top: calc(100% + 6px);
   z-index: 40;
-  padding: 12px 14px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1594,7 +1587,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   margin: 0 0 4px;
 }
 .activefilters__label { font-size: 11.5px; color: var(--ink-3); }
-.activefilters .chip { text-decoration: none; }
 
 /* 3 · Create forms in a drawer ------------------------------------------- */
 
@@ -1602,7 +1594,7 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
    the no-JS fallback and stays visible when the server opens it (?new=1). */
 html.js .panel--create:not([open]) { display: none; }
 html.js .modal-source { display: none; }
-html.js .modal__body .modal-source { display: block; }
+html.js .modal__body .modal-source,
 html.js .panel--create[open] .modal-source { display: block; }
 
 .modal--drawer { justify-content: flex-end; padding: 0; }
@@ -1619,10 +1611,9 @@ html.js .panel--create[open] .modal-source { display: block; }
   animation: drawer-in .16s ease-out;
 }
 @keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } }
-.modal--drawer .modal__body { padding: 16px; }
 .modal--drawer .form__actions {
   position: sticky;
-  bottom: -16px;
+  bottom: -14px;
   padding: 10px 0 6px;
   background: var(--card);
   border-top: 1px solid var(--line-2);
@@ -1632,7 +1623,6 @@ html.js .panel--create[open] .modal-source { display: block; }
   .statbar { gap: 8px 14px; padding: 9px 12px; }
   .statbar .stat { flex: 1 1 calc(50% - 14px); }
 
-  .toolbar--filters { position: static; }
   .filters--pop { flex: 1 1 100%; }
   .filters--pop > .filters__body {
     position: static;
@@ -1642,11 +1632,6 @@ html.js .panel--create[open] .modal-source { display: block; }
     border-radius: 0;
     box-shadow: none;
   }
-}
-
-@media (max-width: 620px) {
-  .modal--drawer { align-items: stretch; }
-  .modal--drawer .modal__panel { max-height: none; border-radius: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

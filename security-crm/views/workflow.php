@@ -66,7 +66,7 @@ $overdue = count(array_filter($tasks, fn($t) => $t['due_at'] && $t['due_at'] < $
   <?php if ($canCreate): ?>
   <a class="btn btn--primary btn--sm" href="?page=workflow&amp;new=1"
      data-modal-node="new-task-form" data-modal-drawer data-modal-title="Add a task">+ Add task</a>
-  <details class="panel panel--create" id="new-task" <?= isset($_GET['new']) ? 'open' : '' ?>>
+  <details class="panel panel--create" <?= isset($_GET['new']) ? 'open' : '' ?>>
     <summary class="btn btn--primary btn--summary">+ Add task</summary>
     <div class="modal-source" id="new-task-form">
     <form class="card form form--inline" method="post" action="index.php">

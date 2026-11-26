@@ -152,7 +152,7 @@ $stats = [
     </div>
 
     <?php if ($canManage): ?>
-      <details class="panel panel--sub panel--create" id="new-user" <?= (count($users) < 2 || isset($_GET['new'])) ? 'open' : '' ?>>
+      <details class="panel panel--sub panel--create" <?= (count($users) < 2 || isset($_GET['new'])) ? 'open' : '' ?>>
         <summary class="btn btn--ghost btn--summary btn--sm">+ Add user</summary>
         <div class="modal-source" id="new-user-form">
         <form class="form form--sub" method="post" action="index.php">

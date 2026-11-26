@@ -67,7 +67,7 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
 </div>
 
 <?php if ($canEdit): ?>
-<details class="panel panel--create" id="new-template-panel" <?= isset($_GET['new']) ? 'open' : '' ?>>
+<details class="panel panel--create" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary class="btn btn--primary btn--summary btn--sm">+ New template</summary>
   <div class="modal-source" id="new-template-form">
   <form class="card form" method="post" action="index.php">

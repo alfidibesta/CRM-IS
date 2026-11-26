@@ -87,7 +87,7 @@ $canExport = can('issue.export');
 </section>
 
 <?php if ($canCreate): ?>
-<details class="panel panel--create" id="new-issue" <?= isset($_GET['new']) ? 'open' : '' ?>>
+<details class="panel panel--create" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary class="btn btn--primary btn--summary">+ Report new issue</summary>
   <div class="modal-source" id="new-issue-form">
   <form class="card form" method="post" action="index.php">
@@ -172,13 +172,10 @@ $canExport = can('issue.export');
     <input type="hidden" name="page" value="issues">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search code, title, owner, asset…">
     <button type="submit" class="btn btn--ghost">Search</button>
-    <?php if ($cat || $sev || $stt || $q !== '' || $tag !== ''): ?>
-      <a class="btn btn--ghost" href="?page=issues">Clear</a>
-    <?php endif; ?>
   </form>
 
   <details class="filters filters--pop">
-    <summary>Filters<?= ($cat || $sev || $stt || $tag) ? ' · on' : '' ?></summary>
+    <summary>Filters</summary>
     <div class="filters__body">
     <div class="chips chips--filter">
       <span class="chips__label">Category</span>

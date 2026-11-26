@@ -67,7 +67,7 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
 
 <div class="toolbar toolbar--filters">
   <details class="filters filters--pop">
-    <summary>Filters<?= $narrow ? ' · on' : '' ?></summary>
+    <summary>Filters</summary>
     <div class="filters__body">
 <form class="form" method="get" action="index.php">
   <input type="hidden" name="page" value="audit">

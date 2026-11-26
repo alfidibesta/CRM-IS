@@ -372,13 +372,11 @@
    *
    * Simple is the default: the second layer of a page (filter clusters,
    * explainers, extra counters, coverage charts) sits in a closed <details>.
-   * Detailed opens every block tagged data-more. A block the server opened
-   * because a filter is active carries data-more-keep, so switching views
-   * never hides the result of a search. */
+   * Detailed opens every block tagged data-more. */
   var detailBtn = doc.querySelector('[data-detail-toggle]');
-  /* Create panels and the filter popover are controls, not the second layer of
-     the page: Detailed must not force a form or a panel open. */
-  var moreBlocks = doc.querySelectorAll('details[data-more]:not(.panel--create):not(.filters--pop)');
+  /* Create panels are controls, not the second layer of the page: Detailed
+     must not force a form open. */
+  var moreBlocks = doc.querySelectorAll('details[data-more]:not(.panel--create)');
 
   function isDetailed() {
     return root.dataset.detail === 'detailed';
@@ -396,7 +394,6 @@
   function applyDetail() {
     var open = isDetailed();
     moreBlocks.forEach(function (box) {
-      if (box.hasAttribute('data-more-keep')) return;
       box.open = open;
     });
   }

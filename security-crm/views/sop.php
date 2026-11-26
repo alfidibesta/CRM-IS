@@ -37,8 +37,6 @@ function chip_url(array $over): string
     return '?' . http_build_query(array_merge($base, $over));
 }
 
-$activeFilters = ($type || $scope || $status || $q !== '');
-
 // Document control is restricted to the roles that own the library.
 $canManage   = can('sop.manage');
 $canTemplate = can('template.edit');
@@ -145,13 +143,10 @@ $canAck      = can('sop.acknowledge');
     <input type="hidden" name="page" value="sop">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search code, title, owner…">
     <button type="submit" class="btn btn--ghost">Search</button>
-    <?php if ($activeFilters): ?>
-      <a class="btn btn--ghost" href="?page=sop">Clear</a>
-    <?php endif; ?>
   </form>
 
   <details class="filters filters--pop">
-    <summary>Filters<?= ($type !== '' || $scope !== '' || $status !== '') ? ' · on' : '' ?></summary>
+    <summary>Filters</summary>
     <div class="filters__body">
     <div class="chips chips--filter">
       <a class="chip <?= !$type ? 'is-on' : '' ?>" href="<?= e(chip_url(['type' => ''])) ?>">All <b><?= $counts['all'] ?></b></a>
@@ -202,7 +197,7 @@ $canAck      = can('sop.acknowledge');
 <?php endif; ?>
 
 <?php if ($canManage): ?>
-  <details class="panel panel--create" id="new-document" <?= ($edit || $draft || isset($_GET['new'])) ? 'open' : '' ?>>
+  <details class="panel panel--create" <?= ($edit || $draft || isset($_GET['new'])) ? 'open' : '' ?>>
     <summary class="btn btn--primary btn--summary btn--sm"><?= $edit ? 'Edit ' . e((string) $edit['code']) : '+ New document' ?></summary>
     <div class="modal-source" id="new-sop-form">
     <form class="card form" method="post" action="index.php">

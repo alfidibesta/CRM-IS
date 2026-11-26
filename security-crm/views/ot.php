@@ -134,7 +134,7 @@ function ot_url(array $over): string
 </section>
 
 <?php if ($canManage): ?>
-<details class="card more panel--create" id="new-ot" data-more>
+<details class="card more panel--create" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary>Register a vulnerability <span class="more__hint">daily monitoring · PLC, HMI, SCADA</span></summary>
   <div class="more__body">
   <div class="modal-source" id="new-ot-form">
@@ -257,13 +257,10 @@ function ot_url(array $over): string
       <input type="hidden" name="site" value="<?= e($siteIn) ?>">
       <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search vulnerability, facility, contact…">
       <button type="submit" class="btn btn--ghost">Search</button>
-      <?php if ($catIn !== '' || $stateIn !== '' || $siteIn !== '' || $q !== ''): ?>
-        <a class="btn btn--ghost" href="?page=ot">Clear</a>
-      <?php endif; ?>
     </form>
 
     <details class="filters filters--pop">
-      <summary>Filters<?= ($catIn !== '' || $stateIn !== '' || $siteIn !== '') ? ' · on' : '' ?></summary>
+      <summary>Filters</summary>
       <div class="filters__body">
       <div class="chips chips--filter">
         <span class="chips__label">Business location</span>

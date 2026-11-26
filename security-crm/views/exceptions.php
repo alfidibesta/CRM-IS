@@ -97,7 +97,7 @@ function exc_url(array $over): string
 </section>
 
 <?php if ($canManage): ?>
-<details class="panel panel--create" id="new-exception" <?= isset($_GET['new']) ? 'open' : '' ?>>
+<details class="panel panel--create" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary class="btn btn--primary btn--summary btn--sm">+ Add EDLP exception</summary>
   <div class="modal-source" id="new-exception-form">
   <form class="card form" method="post" action="index.php">
@@ -168,13 +168,10 @@ function exc_url(array $over): string
     <input type="hidden" name="page" value="exceptions">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search title, target, reference…">
     <button type="submit" class="btn btn--ghost">Search</button>
-    <?php if ($catIn !== '' || $stateIn !== '' || $q !== ''): ?>
-      <a class="btn btn--ghost" href="?page=exceptions">Clear</a>
-    <?php endif; ?>
   </form>
 
   <details class="filters filters--pop">
-    <summary>Filters<?= ($catIn !== '' || $stateIn !== '') ? ' · on' : '' ?></summary>
+    <summary>Filters</summary>
     <div class="filters__body">
     <div class="chips chips--filter">
       <span class="chips__label">Category</span>
