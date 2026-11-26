@@ -4,18 +4,20 @@
 $u    = current_user();
 $role = $u['role'] ?? 'viewer';
 
+/* Third field is the symbol id in the sprite below: every destination looks
+   different, which a dot in one of three colours could never do. */
 $nav = [
-    ['dashboard', 'Overview',  'blue',   'page.dashboard'],
-    ['issues',    'Issues',    'red',    'page.issues'],
-    ['workflow',  'Workflow',  'orange', 'page.workflow'],
-    ['sop',       'SOP & Policy', 'blue', 'page.sop'],
-    ['templates', 'Templates', 'neutral', 'page.templates'],
-    ['exceptions', 'EDLP Exceptions', 'orange', 'page.exceptions'],
-    ['ot',        'OT Vulnerabilities', 'red', 'page.ot'],
-    ['audit',     'Audit trail',  'neutral', 'page.audit'],
+    ['dashboard', 'Overview',  'i-overview', 'page.dashboard'],
+    ['issues',    'Issues',    'i-issues',   'page.issues'],
+    ['workflow',  'Workflow',  'i-workflow', 'page.workflow'],
+    ['sop',       'SOP & Policy', 'i-sop',   'page.sop'],
+    ['templates', 'Templates', 'i-templates', 'page.templates'],
+    ['exceptions', 'EDLP Exceptions', 'i-exceptions', 'page.exceptions'],
+    ['ot',        'OT Vulnerabilities', 'i-ot', 'page.ot'],
+    ['audit',     'Audit trail',  'i-audit', 'page.audit'],
 ];
 
-$categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Security' => 'orange'];
+$categories = ['Physical Security' => 'i-cat-physical', 'IT Security' => 'i-cat-it', 'Strain Security' => 'i-cat-strain'];
 ?>
 <!doctype html>
 <html lang="en">
@@ -40,6 +42,23 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
 <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
+<?php /* One inline sprite: no icon font, no extra request, and every symbol
+         strokes currentColor, so it follows the text and the active item. */ ?>
+<svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-overview" viewBox="0 0 24 24"><path d="M4 4h6.5v6.5H4zM13.5 4H20v6.5h-6.5zM4 13.5h6.5V20H4zM13.5 13.5H20V20h-6.5z"/></symbol>
+  <symbol id="i-issues" viewBox="0 0 24 24"><path d="M12 3.8 21.2 20H2.8L12 3.8Z"/><path d="M12 10v4.4M12 17.6h.01"/></symbol>
+  <symbol id="i-workflow" viewBox="0 0 24 24"><path d="M4 4h4.2v11H4zM9.9 4h4.2v16H9.9zM15.8 4H20v7.5h-4.2z"/></symbol>
+  <symbol id="i-sop" viewBox="0 0 24 24"><path d="M6 3.5h7.5L18 8v12.5H6z"/><path d="M13.5 3.5V8H18"/><path d="M9 12.5h6M9 16h4"/></symbol>
+  <symbol id="i-templates" viewBox="0 0 24 24"><path d="M4 7.5v11.2a1.3 1.3 0 0 0 1.3 1.3h9.2"/><path d="M8.5 3.5h7L20 8v12.5H8.5z"/><path d="M15.5 3.5V8H20"/><path d="M11.5 12h5M11.5 15.5h3"/></symbol>
+  <symbol id="i-exceptions" viewBox="0 0 24 24"><circle cx="7.6" cy="16.4" r="3.9"/><path d="M10.4 13.6 20 4M16.6 7.4l2.6 2.6M13.6 10.4l2.3 2.3"/></symbol>
+  <symbol id="i-ot" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/><path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21"/></symbol>
+  <symbol id="i-audit" viewBox="0 0 24 24"><path d="M4 6h9M4 11h9M4 16h5"/><path d="m15 16 2.2 2.2 4-4"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.2" r="3.2"/><path d="M3.6 20c0-3 2.4-5.1 5.4-5.1s5.4 2.1 5.4 5.1"/><path d="M16.2 5.6a3.2 3.2 0 0 1 0 5.6"/><path d="M18 15c2 .7 3.4 2.4 3.4 5"/></symbol>
+  <symbol id="i-log" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="m7.5 10 2.5 2.5-2.5 2.5M13 15h4"/></symbol>
+  <symbol id="i-cat-physical" viewBox="0 0 24 24"><path d="M5 20V8M12 20V8M19 20V8M3 12h18M3 16h18"/></symbol>
+  <symbol id="i-cat-it" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></symbol>
+  <symbol id="i-cat-strain" viewBox="0 0 24 24"><circle cx="9.5" cy="8" r="3.2"/><path d="M3.5 20c0-3.2 2.7-5.4 6-5.4s6 2.2 6 5.4"/><path d="M18.5 4.5v5.2M18.5 12.6h.01"/></symbol>
+</svg>
 <a class="skip-link" href="#main">Skip to main content</a>
 <div class="shell">
 
@@ -53,20 +72,20 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
     </div>
 
     <nav class="nav">
-      <?php foreach ($nav as [$key, $label, $tone, $perm]): ?>
+      <?php foreach ($nav as [$key, $label, $icon, $perm]): ?>
         <?php if (!can($perm)) continue; ?>
         <?php $isActive = $page === $key || ($key === 'issues' && $page === 'issue') || ($key === 'templates' && $page === 'template'); ?>
         <a class="nav__item <?= $isActive ? 'is-active' : '' ?>"
            href="?page=<?= $key ?>" <?= $isActive ? 'aria-current="page"' : '' ?>>
-          <span class="nav__dot nav__dot--<?= $tone ?>"></span> <?= e($label) ?>
+          <svg class="nav__icon" aria-hidden="true" focusable="false"><use href="#<?= e($icon) ?>"></use></svg> <?= e($label) ?>
         </a>
       <?php endforeach; ?>
 
       <?php if (can('page.issues')): ?>
         <p class="nav__label">Categories</p>
-        <?php foreach ($categories as $cat => $tone): ?>
+        <?php foreach ($categories as $cat => $icon): ?>
           <a class="nav__item nav__item--sm" href="?page=issues&amp;cat=<?= urlencode($cat) ?>">
-            <span class="chip-dot chip-dot--<?= $tone ?>"></span> <?= e($cat) ?>
+            <svg class="nav__icon nav__icon--sm" aria-hidden="true" focusable="false"><use href="#<?= e($icon) ?>"></use></svg> <?= e($cat) ?>
           </a>
         <?php endforeach; ?>
       <?php endif; ?>
@@ -83,11 +102,11 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
       <?php if (can('page.users')): ?>
         <p class="nav__label">Administration</p>
         <a class="nav__item <?= $page === 'users' ? 'is-active' : '' ?>" href="?page=users">
-          <span class="nav__dot nav__dot--orange"></span> Users &amp; Authority
+          <svg class="nav__icon" aria-hidden="true" focusable="false"><use href="#i-users"></use></svg> Users &amp; Authority
         </a>
         <?php if (can('page.logs')): ?>
           <a class="nav__item <?= $page === 'logs' ? 'is-active' : '' ?>" href="?page=logs">
-            <span class="nav__dot nav__dot--neutral"></span> System log
+            <svg class="nav__icon" aria-hidden="true" focusable="false"><use href="#i-log"></use></svg> System log
           </a>
         <?php endif; ?>
       <?php endif; ?>

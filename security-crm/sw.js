@@ -12,7 +12,7 @@
  * control /assets/, and the offline fallback has to answer page navigations.
  */
 
-const VERSION = 'secops-2026-11-26j';
+const VERSION = 'secops-2026-11-26k';
 const OFFLINE_URL = new URL('offline.html', self.location).href;
 const PRECACHE = ['assets/app.css', 'assets/app.js', OFFLINE_URL];
 const STATIC = /\.(css|js|png|jpe?g|svg|ico|webp|woff2?)$/i;

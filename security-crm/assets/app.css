@@ -98,10 +98,18 @@ ul, ol { padding: 0; list-style: none; }
 .nav__item:hover { background: var(--line-2); color: var(--ink); }
 .nav__item.is-active { background: var(--ink); color: #fff; font-weight: 600; }
 .nav__item--sm { font-size: 12px; padding: 4px 9px; }
-.nav__dot { width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px; }
-.nav__dot--red { background: var(--red); }
-.nav__dot--blue { background: var(--blue); }
-.nav__dot--orange { background: var(--orange); }
+/* Navigation marks come from the inline sprite in views/header.php: one
+   request-free symbol per destination, stroked in currentColor so hover and
+   the inverted active item need no extra rules. */
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.nav__icon {
+  width: 15px; height: 15px; flex: 0 0 15px;
+  fill: none; stroke: currentColor; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+  opacity: .6;
+}
+.nav__icon--sm { width: 13px; height: 13px; flex: 0 0 13px; stroke-width: 1.9; }
+.nav__item:hover .nav__icon, .nav__item.is-active .nav__icon { opacity: 1; }
 
 .chip-dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; flex: 0 0 7px; }
 .chip-dot--red { background: var(--red); }
@@ -1356,7 +1364,6 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
   color: var(--ink-2);
   max-height: 520px; overflow: auto;
 }
-.nav__dot--neutral { background: var(--ink-3); }
 
 /* Document control: version history and reading acknowledgement */
 .ack { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
@@ -1639,5 +1646,31 @@ html.js .panel--create[open] .modal-source { display: block; }
 
 @media (prefers-reduced-motion: reduce) {
   .modal--drawer .modal__panel { animation: none; }
+}
+
+/* 4 · Dashboard trend ------------------------------------------------------ */
+
+/* Opened vs closed: two thin bars per month, drawn with flexbox and a
+   percentage height. No chart library, so the page still loads nothing from
+   outside the plant network. */
+.trend__chart { display: flex; align-items: flex-end; gap: 8px; }
+.trend__col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.trend__bars { display: flex; align-items: flex-end; justify-content: center; gap: 3px; width: 100%; height: 92px; }
+.trend__bar { width: min(13px, 40%); min-height: 3px; border-radius: 3px 3px 0 0; }
+.trend__bar--in { background: var(--red); }
+.trend__bar--out { background: var(--green); }
+.trend__month { font-size: 10.5px; color: var(--ink-3); }
+.trend__legend { display: flex; gap: 14px; margin-top: 8px; font-size: 11.5px; color: var(--ink-2); }
+.trend__key { display: inline-flex; align-items: center; gap: 5px; }
+.trend__key::before { content: ""; width: 8px; height: 8px; border-radius: 2px; }
+.trend__key--in::before { background: var(--red); }
+.trend__key--out::before { background: var(--green); }
+.trend__key b { font-weight: 600; color: var(--ink); }
+.trend__foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--ink-3); }
+.trend__foot b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 420px) {
+  .trend__chart { gap: 4px; }
+  .trend__bar { width: 9px; }
 }
 

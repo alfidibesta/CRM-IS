@@ -61,6 +61,56 @@ $load = $pdo->query('SELECT column_key, COUNT(*) c FROM tasks GROUP BY column_ke
 $totalTasks = array_sum($load) ?: 1;
 
 $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Critical' => 'red'];
+
+/* Trend and effectiveness (ISO 27001 clause 9.3): a snapshot says what is open
+   today, not whether the plant is improving. Six calendar months, opened from
+   the report date and closed from the day the issue was set to Resolved. */
+$months = [];
+for ($i = 5; $i >= 0; $i--) {
+    $key = date('Y-m', strtotime("first day of -$i months"));
+    $months[$key] = ['label' => date('M', strtotime($key . '-01')), 'in' => 0, 'out' => 0];
+}
+$since = array_key_first($months) . '-01';
+
+$openedRows = $pdo->prepare("SELECT DATE_FORMAT(COALESCE(reported_at, DATE(created_at)), '%Y-%m') ym, COUNT(*) c
+                              FROM issues WHERE COALESCE(reported_at, DATE(created_at)) >= ? GROUP BY ym");
+$openedRows->execute([$since]);
+foreach ($openedRows->fetchAll(PDO::FETCH_KEY_PAIR) as $ym => $c) {
+    if (isset($months[$ym])) $months[$ym]['in'] = (int) $c;
+}
+
+$closedRows = $pdo->prepare("SELECT DATE_FORMAT(closed_at, '%Y-%m') ym, COUNT(*) c
+                              FROM issues WHERE closed_at >= ? GROUP BY ym");
+$closedRows->execute([$since]);
+foreach ($closedRows->fetchAll(PDO::FETCH_KEY_PAIR) as $ym => $c) {
+    if (isset($months[$ym])) $months[$ym]['out'] = (int) $c;
+}
+
+$openedTotal = array_sum(array_column($months, 'in'));
+$closedTotal = array_sum(array_column($months, 'out'));
+$trendMax    = max(1, ...array_column($months, 'in'), ...array_column($months, 'out'));
+
+$mttrSt = $pdo->prepare('SELECT COUNT(*) n, AVG(DATEDIFF(closed_at, COALESCE(reported_at, DATE(created_at)))) d
+                           FROM issues
+                          WHERE closed_at >= ? AND closed_at >= COALESCE(reported_at, DATE(created_at))');
+$mttrSt->execute([$since]);
+$mttrRow  = $mttrSt->fetch() ?: ['n' => 0, 'd' => null];
+$mttrDays = $mttrRow['d'] !== null ? round((float) $mttrRow['d'], 1) : null;
+
+$ageRow = $pdo->query("SELECT
+        SUM(DATEDIFF(CURDATE(), COALESCE(reported_at, DATE(created_at))) <= 7) AS b1,
+        SUM(DATEDIFF(CURDATE(), COALESCE(reported_at, DATE(created_at))) BETWEEN 8 AND 30) AS b2,
+        SUM(DATEDIFF(CURDATE(), COALESCE(reported_at, DATE(created_at))) BETWEEN 31 AND 90) AS b3,
+        SUM(DATEDIFF(CURDATE(), COALESCE(reported_at, DATE(created_at))) > 90) AS b4
+      FROM issues WHERE status <> 'Resolved'")->fetch() ?: [];
+$ageBuckets = [
+    ['0–7 days',   (int) ($ageRow['b1'] ?? 0), 'green'],
+    ['8–30 days',  (int) ($ageRow['b2'] ?? 0), 'blue'],
+    ['31–90 days', (int) ($ageRow['b3'] ?? 0), 'orange'],
+    ['over 90 days', (int) ($ageRow['b4'] ?? 0), 'red'],
+];
+$ageTotal = array_sum(array_column($ageBuckets, 1));
+$ageMax   = max(1, ...array_column($ageBuckets, 1));
 ?>
 
 <section class="grid grid--stats statbar">
@@ -208,6 +258,58 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
         <p class="footnote"><a class="link" href="?page=sop">Open the document library</a></p>
       </div>
     </details>
+  </article>
+</section>
+
+<section class="grid grid--two grid--start">
+  <article class="card">
+    <header class="card__head">
+      <h2>Opened vs closed</h2>
+      <span class="muted">last 6 months</span>
+    </header>
+    <?php if ($openedTotal + $closedTotal === 0): ?>
+      <p class="muted">No issue was opened or closed in the last six months.</p>
+    <?php else: ?>
+      <div class="trend__chart" role="img"
+           aria-label="Issues opened and closed per month, last six months">
+        <?php foreach ($months as $ym => $m): ?>
+          <div class="trend__col" title="<?= e($m['label']) ?>: <?= $m['in'] ?> opened, <?= $m['out'] ?> closed">
+            <div class="trend__bars">
+              <span class="trend__bar trend__bar--in" style="height: <?= max(3, (int) round($m['in'] / $trendMax * 100)) ?>%"></span>
+              <span class="trend__bar trend__bar--out" style="height: <?= max(3, (int) round($m['out'] / $trendMax * 100)) ?>%"></span>
+            </div>
+            <span class="trend__month"><?= e($m['label']) ?></span>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <p class="trend__legend">
+        <span class="trend__key trend__key--in">Opened <b><?= $openedTotal ?></b></span>
+        <span class="trend__key trend__key--out">Closed <b><?= $closedTotal ?></b></span>
+      </p>
+    <?php endif; ?>
+    <p class="trend__foot">Mean time to resolve
+      <b><?= $mttrDays !== null ? e(number_format($mttrDays, 1)) . ' days' : '—' ?></b>
+      <?= $mttrRow['n'] ? '· ' . (int) $mttrRow['n'] . ' closed in the window' : '· nothing closed in the window yet' ?>.
+    </p>
+  </article>
+
+  <article class="card">
+    <header class="card__head">
+      <h2>Age of unresolved issues</h2>
+      <span class="muted"><?= $ageTotal ?> not yet resolved</span>
+    </header>
+    <ul class="bars">
+      <?php foreach ($ageBuckets as [$label, $n, $tone]): ?>
+        <li>
+          <div class="bars__row">
+            <span class="bars__name"><?= e($label) ?></span>
+            <span class="bars__val"><?= $n ?></span>
+          </div>
+          <div class="bars__track"><span class="bars__fill bars__fill--<?= $tone ?>" style="width: <?= $ageTotal ? max(4, (int) round($n / $ageMax * 100)) : 0 ?>%"></span></div>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+    <p class="footnote">Measured from the reported date. Only Resolved stops the clock, so Contained work ages here too.</p>
   </article>
 </section>
 

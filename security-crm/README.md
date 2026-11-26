@@ -187,7 +187,9 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
 ## Features
 
 - **Dashboard** — open and overdue counts, issues by category, risk ratings,
-  documents due for review, and the six latest audit entries.
+  documents due for review, and the six latest audit entries; plus the trend a
+  management review asks for — issues opened vs closed per month for the last
+  six months, mean time to resolve, and the age of every unresolved issue.
 - **SOP & Policy library** — type (Policy / SOP / Guideline), scope, version,
   owner, status and review date; the controlled text expands inline; document
   control adds, edits and deletes documents in place and links to the template
@@ -313,7 +315,7 @@ and now show their raw action key (for example `cctv.prune`).
 | URL | What it is |
 | --- | --- |
 | `?page=login` | Sign-in screen (its own layout, no sidebar) |
-| `?page=dashboard` | Posture at a glance: stats, issues by category, risk ratings, live activity feed, upcoming reviews, template shortcuts |
+| `?page=dashboard` | Posture at a glance: stats, issues by category, risk ratings, six-month opened-vs-closed trend with mean time to resolve, age of unresolved issues, live activity feed, upcoming reviews, template shortcuts |
 | `?page=sop` | SOP & Policy library — filter chips by type / scope / status, search, expandable rows with the controlled text and version history, create / edit / delete documents (document control), "I have read" acknowledgement with coverage per revision, shortcut to add a form template |
 | `?page=workflow` | Kanban board (Backlog → Planned → In Progress → Review → Done), drag & drop saves instantly, delete + link to issue |
 | `?page=issues` | Issue register — category / severity / status / tag filters, tag chips per issue, search, risk score column, quick status change, links to the report |

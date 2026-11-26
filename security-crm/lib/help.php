@@ -19,6 +19,7 @@ function help_topics(): array
             'summary' => 'One screen for the whole programme: document control, open issues, board progress, evidence, exceptions and the newest activity.',
             'steps'   => [
                 'Start with the counters — open issues, tasks in flight and board completion show whether the plant is keeping up.',
+                'Read "Opened vs closed" with "Age of unresolved issues": the trend and the backlog age answer whether the programme is improving, which the counters alone cannot.',
                 'Click a category in "Issues by category" to open the register already filtered to it.',
                 'Use the bell for new alerts and "Recently reported" for the latest findings.',
             ],
