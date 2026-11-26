@@ -26,11 +26,14 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
 <script nonce="<?= e(csp_nonce()) ?>">
 /* Applied before first paint so the chosen theme never flashes. */
 (function () {
+  document.documentElement.classList.add('js');
   try {
     var t = localStorage.getItem('secops-theme');
     if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
     var d = localStorage.getItem('secops-density');
     if (d === 'compact' || d === 'comfortable') document.documentElement.dataset.density = d;
+    // Simple shows one layer per page; Detailed opens every collapsible block.
+    document.documentElement.dataset.detail = localStorage.getItem('secops-detail') === 'detailed' ? 'detailed' : 'simple';
   } catch (e) {}
 })();
 </script>
@@ -110,6 +113,8 @@ $categories = ['Physical Security' => 'red', 'IT Security' => 'blue', 'Strain Se
                 title="Switch between compact and comfortable spacing">Compact</button>
         <button type="button" class="btn btn--ghost btn--sm" data-theme-toggle aria-pressed="true"
                 title="Bright or dim the interface">Dim</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-detail-toggle aria-pressed="false"
+                title="Simple shows the essentials; Detailed opens every panel and column">Detailed view</button>
 
         <span class="pill">ISO 27001 scope</span>
         <span class="pill pill--date"><?= date('D, d M Y') ?></span>

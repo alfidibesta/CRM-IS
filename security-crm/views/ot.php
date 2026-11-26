@@ -110,7 +110,7 @@ function ot_url(array $over): string
 }
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--blue">
     <p class="stat__label">OT findings on record</p>
     <p class="stat__value"><?= count($all) ?></p>
@@ -134,12 +134,10 @@ function ot_url(array $over): string
 </section>
 
 <?php if ($canManage): ?>
-<section class="card">
-  <header class="card__head">
-    <h2>Vulnerability registration</h2>
-    <span class="muted">Daily monitoring · factory automation (PLC, HMI, SCADA)</span>
-  </header>
-
+<details class="card more panel--create" id="new-ot" data-more>
+  <summary>Register a vulnerability <span class="more__hint">daily monitoring · PLC, HMI, SCADA</span></summary>
+  <div class="more__body">
+  <div class="modal-source" id="new-ot-form">
   <form class="form" method="post" action="index.php">
     <?= csrf_field() ?>
     <?= once_field() ?>
@@ -243,52 +241,14 @@ function ot_url(array $over): string
       <span class="muted">An open finding past its due date reads <b>Overdue</b>.</span>
     </div>
   </form>
-</section>
+  </div>
+  </div>
+</details>
 <?php endif; ?>
 
 <section class="card card--flush">
-  <header class="card__head card__head--pad">
+  <header class="card__head card__head--pad toolbar--filters">
     <h2>List of vulnerabilities</h2>
-    <span class="muted"><?= count($rows) ?> of <?= count($all) ?> shown</span>
-  </header>
-
-  <div class="toolbar">
-    <div class="chips chips--filter">
-      <span class="chips__label">Business Location Inquiry</span>
-      <form class="search search--inline" method="get" action="index.php">
-        <input type="hidden" name="page" value="ot">
-        <input type="hidden" name="cat" value="<?= e($catIn) ?>">
-        <input type="hidden" name="state" value="<?= e($stateIn) ?>">
-        <input type="hidden" name="q" value="<?= e($q) ?>">
-        <select name="site" class="search__select" aria-label="Business location" data-autosubmit>
-          <option value="">All workplaces</option>
-          <?php foreach ($sites as $s): ?>
-            <option value="<?= e($s) ?>" <?= $siteIn === $s ? 'selected' : '' ?>><?= e($s) ?> (<?= (int) $siteCnt[$s] ?>)</option>
-          <?php endforeach; ?>
-        </select>
-        <button type="submit" class="btn btn--ghost btn--xs">Apply</button>
-      </form>
-    </div>
-
-    <div class="chips chips--filter">
-      <span class="chips__label">Current status</span>
-      <?php foreach (['open' => 'Open', 'mitigating' => 'Mitigating', 'overdue' => 'Overdue', 'accepted' => 'Accepted', 'resolved' => 'Resolved'] as $key => $label): ?>
-        <a class="chip <?= $stateIn === $key ? 'is-on' : '' ?>" href="<?= e(ot_url(['state' => $stateIn === $key ? '' : $key])) ?>"><?= $label ?></a>
-      <?php endforeach; ?>
-    </div>
-  </div>
-
-  <div class="toolbar">
-    <div class="chips chips--filter">
-      <span class="chips__label">Vulnerabilities</span>
-      <a class="chip <?= $catIn === '' ? 'is-on' : '' ?>" href="<?= e(ot_url(['cat' => ''])) ?>">All <b><?= count($all) ?></b></a>
-      <?php foreach ($catOptions as $name => $tone): ?>
-        <a class="chip chip--<?= e($tone) ?> <?= $catIn === $name ? 'is-on' : '' ?>"
-           href="<?= e(ot_url(['cat' => $catIn === $name ? '' : $name])) ?>">
-          <?= e($name) ?> <b><?= (int) ($catCnt[$name] ?? 0) ?></b>
-        </a>
-      <?php endforeach; ?>
-    </div>
 
     <form class="search" method="get" action="index.php">
       <input type="hidden" name="page" value="ot">
@@ -301,19 +261,78 @@ function ot_url(array $over): string
         <a class="btn btn--ghost" href="?page=ot">Clear</a>
       <?php endif; ?>
     </form>
-  </div>
+
+    <details class="filters filters--pop">
+      <summary>Filters<?= ($catIn !== '' || $stateIn !== '' || $siteIn !== '') ? ' · on' : '' ?></summary>
+      <div class="filters__body">
+      <div class="chips chips--filter">
+        <span class="chips__label">Business location</span>
+        <form class="search search--inline" method="get" action="index.php">
+          <input type="hidden" name="page" value="ot">
+          <input type="hidden" name="cat" value="<?= e($catIn) ?>">
+          <input type="hidden" name="state" value="<?= e($stateIn) ?>">
+          <input type="hidden" name="q" value="<?= e($q) ?>">
+          <select name="site" class="search__select" aria-label="Business location" data-autosubmit>
+            <option value="">All workplaces</option>
+            <?php foreach ($sites as $s): ?>
+              <option value="<?= e($s) ?>" <?= $siteIn === $s ? 'selected' : '' ?>><?= e($s) ?> (<?= (int) $siteCnt[$s] ?>)</option>
+            <?php endforeach; ?>
+          </select>
+          <button type="submit" class="btn btn--ghost btn--xs">Apply</button>
+        </form>
+      </div>
+
+      <div class="chips chips--filter">
+        <span class="chips__label">Current status</span>
+        <?php foreach (['open' => 'Open', 'mitigating' => 'Mitigating', 'overdue' => 'Overdue', 'accepted' => 'Accepted', 'resolved' => 'Resolved'] as $key => $label): ?>
+          <a class="chip <?= $stateIn === $key ? 'is-on' : '' ?>" href="<?= e(ot_url(['state' => $stateIn === $key ? '' : $key])) ?>"><?= $label ?></a>
+        <?php endforeach; ?>
+      </div>
+
+      <div class="chips chips--filter">
+        <span class="chips__label">Vulnerabilities</span>
+        <a class="chip <?= $catIn === '' ? 'is-on' : '' ?>" href="<?= e(ot_url(['cat' => ''])) ?>">All <b><?= count($all) ?></b></a>
+        <?php foreach ($catOptions as $name => $tone): ?>
+          <a class="chip chip--<?= e($tone) ?> <?= $catIn === $name ? 'is-on' : '' ?>"
+             href="<?= e(ot_url(['cat' => $catIn === $name ? '' : $name])) ?>">
+            <?= e($name) ?> <b><?= (int) ($catCnt[$name] ?? 0) ?></b>
+          </a>
+        <?php endforeach; ?>
+      </div>
+
+    </div>
+  </details>
+
+  <span class="countchip"><?= count($rows) ?> of <?= count($all) ?> shown</span>
+
+  <?php if ($canManage): ?>
+    <a class="btn btn--primary btn--sm" href="?page=ot&amp;new=1"
+       data-modal-node="new-ot-form" data-modal-drawer data-modal-title="Register a vulnerability">+ Register finding</a>
+  <?php endif; ?>
+</header>
+
+<?php if ($catIn !== '' || $stateIn !== '' || $siteIn !== '' || $q !== ''): ?>
+<p class="activefilters">
+  <span class="activefilters__label">Showing</span>
+  <?php if ($siteIn !== ''): ?><a class="chip is-on" href="<?= e(ot_url(['site' => ''])) ?>" title="Remove this filter">Location: <?= e($siteIn) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($catIn !== ''): ?><a class="chip is-on" href="<?= e(ot_url(['cat' => ''])) ?>" title="Remove this filter">Vulnerability: <?= e($catIn) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($stateIn !== ''): ?><a class="chip is-on" href="<?= e(ot_url(['state' => ''])) ?>" title="Remove this filter">Status: <?= e(ucfirst($stateIn)) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($q !== ''): ?><a class="chip is-on" href="<?= e(ot_url(['q' => ''])) ?>" title="Clear the search">Search: <?= e($q) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <a class="link" href="?page=ot">Clear all</a>
+</p>
+<?php endif; ?>
 
   <table class="table table--list table--ot">
     <caption class="sr-only">List of OT vulnerabilities</caption>
     <thead>
       <tr>
-        <th scope="col">Report Confirmation Date</th>
+        <th scope="col"><span class="ot-th-full">Report Confirmation Date</span><span class="ot-th-phone">Ref</span></th>
         <th scope="col">Business Sites</th>
         <th scope="col">Vulnerabilities</th>
-        <th scope="col">Target Facilities and Systems</th>
+        <th scope="col" class="col-secondary">Target Facilities and Systems</th>
         <th scope="col">Importance</th>
         <th scope="col">Current Status</th>
-        <th scope="col">Recent Contacts</th>
+        <th scope="col" class="col-secondary">Recent Contacts</th>
         <th class="right" scope="col">Management</th>
       </tr>
     </thead>
@@ -325,10 +344,10 @@ function ot_url(array $over): string
       ?>
       <tr class="row <?= $stateLabel === 'Overdue' ? 'row--overdue' : '' ?>">
         <td class="nowrap">
-          <span class="period"><?= fmt_date($v['identified_at']) ?></span>
+          <span class="period ot-date"><?= fmt_date($v['identified_at']) ?></span>
           <span class="muted mono cell-sub"><?= e($v['code']) ?></span>
         </td>
-        <td class="nowrap"><?= e($v['site']) ?: '—' ?></td>
+        <td class="nowrap ot-site"><?= e($v['site']) ?: '—' ?></td>
         <td class="cell-issue">
           <span class="tag tag--<?= e(ot_category_tone((string) $v['category'])) ?>"><?= e($v['category']) ?: '—' ?></span>
 
@@ -358,7 +377,7 @@ function ot_url(array $over): string
             </details>
           <?php endif; ?>
         </td>
-        <td class="cell-control"><span class="muted"><?= e($v['asset']) ?: '—' ?></span></td>
+        <td class="cell-control col-secondary"><span class="muted"><?= e($v['asset']) ?: '—' ?></span></td>
         <td><span class="tag tag--<?= e(ot_severity_tone($v['severity'])) ?>"><?= e($v['severity']) ?></span></td>
         <td>
           <?= badge($stateLabel, $stateTone) ?>
@@ -368,7 +387,7 @@ function ot_url(array $over): string
             </span>
           <?php endif; ?>
         </td>
-        <td class="cell-control"><span class="muted"><?= e($v['recent_contact']) ?: '—' ?></span></td>
+        <td class="cell-control col-secondary"><span class="muted"><?= e($v['recent_contact']) ?: '—' ?></span></td>
         <td class="right">
           <?php if ($canManage): ?>
             <?php $panel = '?page=ot_panel&id=' . (int) $v['id']; ?>
@@ -389,12 +408,9 @@ function ot_url(array $over): string
 
 <div class="grid grid--two">
   <!-- ------------------------------------------------------------- rules -->
-  <section class="card">
-    <header class="card__head">
-      <h2>How the OT vulnerability register works</h2>
-      <span class="muted">FA · process-control findings</span>
-    </header>
-
+  <details class="card more" data-more>
+    <summary>How this register works <span class="more__hint">locations, status, importance</span></summary>
+    <div class="more__body">
     <ul class="bullets">
       <li><b>One row per weakness, on the asset it touches.</b> The business location is required; the target facilities column names the PLC, HMI, drive, vision system or server so the fix can be found at the cabinet.</li>
       <li><b>The weakness is chosen from a catalogue, or typed in.</b> Business location and vulnerability type both end with <b>Other (direct input)</b>, so a new line or a weakness the catalogue does not name is still recorded consistently.</li>
@@ -403,15 +419,13 @@ function ot_url(array $over): string
       <li><b>Current status is derived.</b> Open or mitigating past the remediation due date reads <b>Overdue</b>; an accepted finding stays visible as <b>Risk accepted</b> instead of disappearing.</li>
       <li><b>Authority:</b> managers and analysts register, edit and delete findings; administrators and viewers read the register.</li>
     </ul>
-  </section>
+    </div>
+  </details>
 
   <!-- ------------------------------------------------------------- coverage -->
-  <section class="card">
-    <header class="card__head">
-      <h2>Findings by vulnerability</h2>
-      <span class="muted"><?= count($all) ?> on record</span>
-    </header>
-
+  <details class="card more" data-more>
+    <summary>Findings by vulnerability <span class="more__hint"><?= count($all) ?> on record</span></summary>
+    <div class="more__body">
     <ul class="bars">
       <?php foreach ($catOptions as $name => $tone): ?>
         <?php $n = (int) ($catCnt[$name] ?? 0); ?>
@@ -427,5 +441,6 @@ function ot_url(array $over): string
         </li>
       <?php endforeach; ?>
     </ul>
-  </section>
+    </div>
+  </details>
 </div>

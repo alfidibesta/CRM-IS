@@ -32,7 +32,7 @@ foreach ($lines as $line) {
 audit('logs.view', 'session', null, 'System log', count($lines) . ' line(s) reviewed' . ($q !== '' ? ' · filter “' . mb_substr($q, 0, 60) . '”' : ''));
 ?>
 
-<section class="grid grid--stats grid--stats--trio">
+<section class="grid grid--stats grid--stats--trio statbar">
   <article class="card stat stat--red">
     <p class="stat__label">PHP errors</p>
     <p class="stat__value"><?= $errors ?></p>

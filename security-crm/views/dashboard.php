@@ -63,7 +63,7 @@ $totalTasks = array_sum($load) ?: 1;
 $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Critical' => 'red'];
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--blue">
     <p class="stat__label">Active documents</p>
     <p class="stat__value"><?= $statSops ?></p>
@@ -79,39 +79,47 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
     <p class="stat__value"><?= (int) ($load['in_progress'] ?? 0) ?></p>
     <p class="stat__hint"><?= (int) ($load['review'] ?? 0) ?> awaiting review</p>
   </article>
-  <article class="card stat stat--neutral">
-    <p class="stat__label">Board completion</p>
-    <p class="stat__value"><?= (int) round(((int) ($load['done'] ?? 0)) / $totalTasks * 100) ?>%</p>
-    <p class="stat__hint"><?= (int) ($load['done'] ?? 0) ?> of <?= $totalTasks ?> tasks done</p>
-  </article>
-  <article class="card stat stat--red">
-    <p class="stat__label">Evidence on file</p>
-    <p class="stat__value"><?= $statFiles ?></p>
-    <p class="stat__hint"><?= $statPeople ?> person record(s)</p>
-  </article>
-  <article class="card stat stat--blue">
-    <p class="stat__label">Form templates</p>
-    <p class="stat__value"><?= $statTpl ?></p>
-    <p class="stat__hint">NDA, agreements, forms</p>
-  </article>
   <article class="card stat stat--orange">
     <p class="stat__label">EDLP exceptions</p>
     <p class="stat__value"><?= $excActive ?></p>
     <p class="stat__hint"><?= $excSoon ?> expiring ≤ 30 days</p>
   </article>
-  <article class="card stat stat--orange">
-    <p class="stat__label">Accounts</p>
-    <p class="stat__value"><?= $statUsers ?></p>
-    <p class="stat__hint">signed in as <?= e(role_label(current_user()['role'] ?? '')) ?></p>
-  </article>
-  <article class="card stat stat--neutral">
-    <p class="stat__label">Board columns</p>
-    <p class="stat__value"><?= count($load) ?></p>
-    <p class="stat__hint">backlog → done</p>
-  </article>
 </section>
 
-<section class="grid grid--two">
+<details class="more" data-more>
+  <summary>More numbers <span class="more__hint">board, evidence, templates, accounts</span></summary>
+  <div class="more__body">
+    <section class="grid grid--stats">
+      <article class="card stat stat--neutral">
+        <p class="stat__label">Board completion</p>
+        <p class="stat__value"><?= (int) round(((int) ($load['done'] ?? 0)) / $totalTasks * 100) ?>%</p>
+        <p class="stat__hint"><?= (int) ($load['done'] ?? 0) ?> of <?= $totalTasks ?> tasks done</p>
+      </article>
+      <article class="card stat stat--red">
+        <p class="stat__label">Evidence on file</p>
+        <p class="stat__value"><?= $statFiles ?></p>
+        <p class="stat__hint"><?= $statPeople ?> person record(s)</p>
+      </article>
+      <article class="card stat stat--blue">
+        <p class="stat__label">Form templates</p>
+        <p class="stat__value"><?= $statTpl ?></p>
+        <p class="stat__hint">NDA, agreements, forms</p>
+      </article>
+      <article class="card stat stat--orange">
+        <p class="stat__label">Accounts</p>
+        <p class="stat__value"><?= $statUsers ?></p>
+        <p class="stat__hint">signed in as <?= e(role_label(current_user()['role'] ?? '')) ?></p>
+      </article>
+      <article class="card stat stat--neutral">
+        <p class="stat__label">Board columns</p>
+        <p class="stat__value"><?= count($load) ?></p>
+        <p class="stat__hint">backlog → done</p>
+      </article>
+    </section>
+  </div>
+</details>
+
+<section class="grid grid--two grid--start">
   <article class="card">
     <header class="card__head">
       <h2>Issues by category</h2>
@@ -131,29 +139,31 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
       <?php endforeach; ?>
     </ul>
 
-    <header class="card__head card__head--sub">
-      <h3>Status split</h3>
-    </header>
-    <div class="chips">
-      <?php foreach (['Open', 'In Progress', 'Contained', 'Resolved'] as $s): ?>
-        <span class="chip chip--<?= status_tone($s) ?>"><?= e($s) ?> <b><?= (int) ($byStatus[$s] ?? 0) ?></b></span>
-      <?php endforeach; ?>
-    </div>
+    <details class="more more--inner" data-more>
+      <summary>Status and risk split</summary>
+      <div class="more__body">
+        <div class="chips">
+          <?php foreach (['Open', 'In Progress', 'Contained', 'Resolved'] as $s): ?>
+            <span class="chip chip--<?= status_tone($s) ?>"><?= e($s) ?> <b><?= (int) ($byStatus[$s] ?? 0) ?></b></span>
+          <?php endforeach; ?>
+        </div>
 
-    <header class="card__head card__head--sub">
-      <h3>Risk ratings</h3>
-      <span class="muted">open issues</span>
-    </header>
-    <ul class="ratinglist">
-      <?php foreach ($byRating as $name => $n): ?>
-        <li>
-          <span class="ratinglist__dot ratinglist__dot--<?= $ratingTone[$name] ?>"></span>
-          <span class="ratinglist__name"><?= e($name) ?></span>
-          <span class="ratinglist__bar"><span class="bars__fill bars__fill--<?= $ratingTone[$name] ?>" style="width: <?= $statOpen ? max(4, round($n / max(1, array_sum($byRating)) * 100)) : 0 ?>%"></span></span>
-          <span class="ratinglist__n"><?= $n ?></span>
-        </li>
-      <?php endforeach; ?>
-    </ul>
+        <header class="card__head card__head--sub">
+          <h3>Risk ratings</h3>
+          <span class="muted">open issues</span>
+        </header>
+        <ul class="ratinglist">
+          <?php foreach ($byRating as $name => $n): ?>
+            <li>
+              <span class="ratinglist__dot ratinglist__dot--<?= $ratingTone[$name] ?>"></span>
+              <span class="ratinglist__name"><?= e($name) ?></span>
+              <span class="ratinglist__bar"><span class="bars__fill bars__fill--<?= $ratingTone[$name] ?>" style="width: <?= $statOpen ? max(4, round($n / max(1, array_sum($byRating)) * 100)) : 0 ?>%"></span></span>
+              <span class="ratinglist__n"><?= $n ?></span>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    </details>
   </article>
 
   <article class="card">
@@ -176,26 +186,28 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
       <?php if (!$feed): ?><li class="feed__item"><p class="muted">No activity yet.</p></li><?php endif; ?>
     </ul>
 
-    <header class="card__head card__head--sub">
-      <h3>Next document reviews</h3>
-      <a class="link" href="?page=sop">Library</a>
-    </header>
-    <div class="table-wrap">
-      <table class="table table--tight">
-        <tbody>
-        <?php foreach ($upcoming as $u): ?>
-          <tr>
-            <td class="mono"><?= e($u['code']) ?></td>
-            <td><?= e($u['title']) ?><span class="muted"> · <?= e($u['owner']) ?></span></td>
-            <td class="nowrap"><?= fmt_date($u['review_at']) ?></td>
-          </tr>
-        <?php endforeach; ?>
-        <?php if (!$upcoming): ?>
-          <tr><td class="muted">Nothing scheduled.</td></tr>
-        <?php endif; ?>
-        </tbody>
-      </table>
-    </div>
+    <details class="more more--inner" data-more>
+      <summary>Next document reviews</summary>
+      <div class="more__body">
+        <div class="table-wrap">
+          <table class="table table--tight">
+            <tbody>
+            <?php foreach ($upcoming as $u): ?>
+              <tr>
+                <td class="mono"><?= e($u['code']) ?></td>
+                <td><?= e($u['title']) ?><span class="muted"> · <?= e($u['owner']) ?></span></td>
+                <td class="nowrap"><?= fmt_date($u['review_at']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            <?php if (!$upcoming): ?>
+              <tr><td class="muted">Nothing scheduled.</td></tr>
+            <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote"><a class="link" href="?page=sop">Open the document library</a></p>
+      </div>
+    </details>
   </article>
 </section>
 
@@ -207,21 +219,21 @@ $ratingTone = ['Low' => 'green', 'Moderate' => 'blue', 'High' => 'orange', 'Crit
   <div class="table-wrap">
   <table class="table">
     <thead>
-      <tr><th>#</th><th>Issue</th><th>Category</th><th>Severity</th><th class="center">Risk</th><th>Status</th><th>Owner</th><th>Due</th><th></th></tr>
+      <tr><th>#</th><th>Issue</th><th class="col-secondary">Category</th><th>Severity</th><th class="center">Risk</th><th>Status</th><th class="col-secondary">Owner</th><th>Due</th><th></th></tr>
     </thead>
     <tbody>
     <?php foreach ($recent as $r): ?>
       <?php $score = (int) $r['risk_score']; ?>
       <tr>
         <td class="mono"><?= e($r['code']) ?></td>
-        <td>
+        <td class="cell-title">
           <a class="strong link" href="?page=issue&amp;id=<?= (int) $r['id'] ?>"><?= e($r['title']) ?></a>
         </td>
-        <td><span class="tag tag--<?= scope_tone($r['category']) ?>"><?= e($r['category']) ?></span></td>
+        <td class="col-secondary"><span class="tag tag--<?= scope_tone($r['category']) ?>"><?= e($r['category']) ?></span></td>
         <td><?= badge($r['severity'], severity_tone($r['severity'])) ?></td>
         <td class="center"><span class="riskscore riskscore--sm riskscore--<?= risk_tone($score) ?>"><?= $score ?></span></td>
         <td><?= badge($r['status'], status_tone($r['status'])) ?></td>
-        <td><?= e($r['owner']) ?></td>
+        <td class="col-secondary"><?= e($r['owner']) ?></td>
         <td class="nowrap"><?= fmt_date($r['due_at']) ?></td>
         <td class="right"><a class="btn btn--ghost btn--xs" href="?page=issue&amp;id=<?= (int) $r['id'] ?>">Report</a></td>
       </tr>
@@ -238,11 +250,9 @@ $auditRecent = can('page.audit')
     : [];
 ?>
 <?php if ($auditRecent): ?>
-<section class="card">
-  <header class="card__head">
-    <h2>Audit trail</h2>
-    <a class="link" href="?page=audit">Open trail</a>
-  </header>
+<details class="more" data-more>
+  <summary>Recent audit entries <span class="more__hint"><?= count($auditRecent) ?> · open the trail</span></summary>
+  <div class="more__body">
   <div class="table-wrap">
   <table class="table table--tight">
     <thead>
@@ -261,15 +271,15 @@ $auditRecent = can('page.audit')
     </tbody>
   </table>
   </div>
-</section>
+  <p class="footnote"><a class="link" href="?page=audit">Open the full audit trail</a></p>
+  </div>
+</details>
 <?php endif; ?>
 
 <?php if (can('page.exceptions') && $excList): ?>
-<section class="card">
-  <header class="card__head">
-    <h2>EDLP exceptions expiring</h2>
-    <a class="link" href="?page=exceptions">Open register</a>
-  </header>
+<details class="more" data-more>
+  <summary>EDLP exceptions expiring <span class="more__hint"><?= count($excList) ?> nearest to the period end</span></summary>
+  <div class="more__body">
   <div class="table-wrap">
   <table class="table table--tight">
     <thead>
@@ -303,23 +313,25 @@ $auditRecent = can('page.audit')
     </tbody>
   </table>
   </div>
-</section>
+  <p class="footnote"><a class="link" href="?page=exceptions">Open the EDLP register</a></p>
+  </div>
+</details>
 <?php endif; ?>
 
 <?php if (can('page.templates') && $tplTop): ?>
-<section class="card">
-  <header class="card__head">
-    <h2>Form templates</h2>
-    <a class="link" href="?page=templates">Open library</a>
-  </header>
-  <div class="quickgrid">
-    <?php foreach ($tplTop as $t): ?>
-      <a class="quickcard" href="?page=doc&amp;id=<?= (int) $t['id'] ?>">
-        <span class="quickcard__code mono"><?= e($t['code']) ?></span>
-        <span class="quickcard__name"><?= e($t['name']) ?></span>
-        <span class="muted"><?= e($t['category']) ?> · download .docx</span>
-      </a>
-    <?php endforeach; ?>
+<details class="more" data-more>
+  <summary>Form templates <span class="more__hint"><?= count($tplTop) ?> most downloaded</span></summary>
+  <div class="more__body">
+    <div class="quickgrid">
+      <?php foreach ($tplTop as $t): ?>
+        <a class="quickcard" href="?page=doc&amp;id=<?= (int) $t['id'] ?>">
+          <span class="quickcard__code mono"><?= e($t['code']) ?></span>
+          <span class="quickcard__name"><?= e($t['name']) ?></span>
+          <span class="muted"><?= e($t['category']) ?> · download .docx</span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+    <p class="footnote"><a class="link" href="?page=templates">Open the template library</a></p>
   </div>
-</section>
+</details>
 <?php endif; ?>

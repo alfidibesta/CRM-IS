@@ -73,7 +73,7 @@ function exc_url(array $over): string
 }
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--blue">
     <p class="stat__label">Exceptions on record</p>
     <p class="stat__value"><?= count($all) ?></p>
@@ -97,8 +97,9 @@ function exc_url(array $over): string
 </section>
 
 <?php if ($canManage): ?>
-<details class="panel" <?= isset($_GET['new']) ? 'open' : '' ?>>
+<details class="panel panel--create" id="new-exception" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary class="btn btn--primary btn--summary btn--sm">+ Add EDLP exception</summary>
+  <div class="modal-source" id="new-exception-form">
   <form class="card form" method="post" action="index.php">
     <?= csrf_field() ?>
     <?= once_field() ?>
@@ -158,28 +159,11 @@ function exc_url(array $over): string
       <span class="muted">A period end inside 30 days shows as <b>Expiring</b>; past it the record reads <b>Expired</b>.</span>
     </div>
   </form>
+  </div>
 </details>
 <?php endif; ?>
 
-<div class="toolbar">
-  <div class="chips chips--filter">
-    <span class="chips__label">Category</span>
-    <a class="chip <?= $catIn === '' ? 'is-on' : '' ?>" href="<?= e(exc_url(['cat' => ''])) ?>">All <b><?= count($all) ?></b></a>
-    <?php foreach ($cats as $c): ?>
-      <a class="chip chip--<?= e($c['tone']) ?> <?= $catIn === $c['name'] ? 'is-on' : '' ?>"
-         href="<?= e(exc_url(['cat' => $catIn === $c['name'] ? '' : $c['name']])) ?>">
-        <?= e($c['name']) ?> <b><?= (int) ($catCnt[$c['name']] ?? 0) ?></b>
-      </a>
-    <?php endforeach; ?>
-  </div>
-
-  <div class="chips chips--filter">
-    <span class="chips__label">State</span>
-    <?php foreach (['active' => 'Active', 'expiring' => 'Expiring', 'expired' => 'Expired', 'pending' => 'Pending', 'revoked' => 'Revoked'] as $key => $label): ?>
-      <a class="chip <?= $stateIn === $key ? 'is-on' : '' ?>" href="<?= e(exc_url(['state' => $stateIn === $key ? '' : $key])) ?>"><?= $label ?></a>
-    <?php endforeach; ?>
-  </div>
-
+<div class="toolbar toolbar--filters">
   <form class="search" method="get" action="index.php">
     <input type="hidden" name="page" value="exceptions">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search title, target, reference…">
@@ -188,7 +172,47 @@ function exc_url(array $over): string
       <a class="btn btn--ghost" href="?page=exceptions">Clear</a>
     <?php endif; ?>
   </form>
+
+  <details class="filters filters--pop">
+    <summary>Filters<?= ($catIn !== '' || $stateIn !== '') ? ' · on' : '' ?></summary>
+    <div class="filters__body">
+    <div class="chips chips--filter">
+      <span class="chips__label">Category</span>
+      <a class="chip <?= $catIn === '' ? 'is-on' : '' ?>" href="<?= e(exc_url(['cat' => ''])) ?>">All <b><?= count($all) ?></b></a>
+      <?php foreach ($cats as $c): ?>
+        <a class="chip chip--<?= e($c['tone']) ?> <?= $catIn === $c['name'] ? 'is-on' : '' ?>"
+           href="<?= e(exc_url(['cat' => $catIn === $c['name'] ? '' : $c['name']])) ?>">
+          <?= e($c['name']) ?> <b><?= (int) ($catCnt[$c['name']] ?? 0) ?></b>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="chips chips--filter">
+      <span class="chips__label">State</span>
+      <?php foreach (['active' => 'Active', 'expiring' => 'Expiring', 'expired' => 'Expired', 'pending' => 'Pending', 'revoked' => 'Revoked'] as $key => $label): ?>
+        <a class="chip <?= $stateIn === $key ? 'is-on' : '' ?>" href="<?= e(exc_url(['state' => $stateIn === $key ? '' : $key])) ?>"><?= $label ?></a>
+      <?php endforeach; ?>
+    </div>
+    </div>
+  </details>
+
+  <span class="countchip"><?= count($rows) ?> of <?= count($all) ?> shown</span>
+
+  <?php if ($canManage): ?>
+    <a class="btn btn--primary btn--sm" href="?page=exceptions&amp;new=1"
+       data-modal-node="new-exception-form" data-modal-drawer data-modal-title="Add an EDLP exception">+ Add exception</a>
+  <?php endif; ?>
 </div>
+
+<?php if ($catIn !== '' || $stateIn !== '' || $q !== ''): ?>
+<p class="activefilters">
+  <span class="activefilters__label">Showing</span>
+  <?php if ($catIn !== ''): ?><a class="chip is-on" href="<?= e(exc_url(['cat' => ''])) ?>" title="Remove this filter">Category: <?= e($catIn) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($stateIn !== ''): ?><a class="chip is-on" href="<?= e(exc_url(['state' => ''])) ?>" title="Remove this filter">State: <?= e(ucfirst($stateIn)) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($q !== ''): ?><a class="chip is-on" href="<?= e(exc_url(['q' => ''])) ?>" title="Clear the search">Search: <?= e($q) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <a class="link" href="?page=exceptions">Clear all</a>
+</p>
+<?php endif; ?>
 
 <section class="card card--flush">
   <table class="table table--list">
@@ -197,11 +221,11 @@ function exc_url(array $over): string
       <tr>
         <th class="num" scope="col">#</th>
         <th scope="col">Exception</th>
-        <th>Category</th>
+        <th class="col-secondary">Category</th>
         <th>Period</th>
         <th>State</th>
-        <th>Risk</th>
-        <th>Owner</th>
+        <th class="col-secondary">Risk</th>
+        <th class="col-secondary">Owner</th>
         <th></th>
       </tr>
     </thead>
@@ -265,7 +289,7 @@ function exc_url(array $over): string
             </details>
           <?php endif; ?>
         </td>
-        <td><span class="tag tag--<?= e(category_tone($pdo, (string) $e['category'])) ?>"><?= e($e['category']) ?></span></td>
+        <td class="col-secondary"><span class="tag tag--<?= e(category_tone($pdo, (string) $e['category'])) ?>"><?= e($e['category']) ?></span></td>
         <td class="nowrap">
           <span class="period"><?= e(exception_period($e)) ?></span>
           <?php if ($days !== null): ?>
@@ -275,8 +299,8 @@ function exc_url(array $over): string
           <?php endif; ?>
         </td>
         <td><?= badge($stateLabel, $stateTone) ?></td>
-        <td><?= badge($e['risk_level'], severity_tone($e['risk_level'])) ?></td>
-        <td class="nowrap"><?= e($e['owner']) ?: '—' ?></td>
+        <td class="col-secondary"><?= badge($e['risk_level'], severity_tone($e['risk_level'])) ?></td>
+        <td class="nowrap col-secondary"><?= e($e['owner']) ?: '—' ?></td>
         <td class="right">
           <?php if ($canManage): ?>
             <?php $panel = '?page=exception_panel&what=exception&id=' . (int) $e['id']; ?>
@@ -299,12 +323,9 @@ function exc_url(array $over): string
 
 <div class="grid grid--two">
   <!-- -------------------------------------------------------- categories -->
-  <section class="card">
-    <header class="card__head">
-      <h2>Exception categories</h2>
-      <span class="muted">adjustable · drives the filter above</span>
-    </header>
-
+  <details class="card more" data-more>
+    <summary>Exception categories <span class="more__hint"><?= count($cats) ?> · adjust or add</span></summary>
+    <div class="more__body">
     <div class="table-wrap">
       <table class="table table--tight">
         <thead>
@@ -361,15 +382,13 @@ function exc_url(array $over): string
         </form>
       </details>
     <?php endif; ?>
-  </section>
+    </div>
+  </details>
 
   <!-- ------------------------------------------------------------- rules -->
-  <section class="card">
-    <header class="card__head">
-      <h2>How the EDLP exception register works</h2>
-      <span class="muted">EDLP · approved deviations</span>
-    </header>
-
+  <details class="card more" data-more>
+    <summary>How this register works <span class="more__hint">periods, renewals, controls</span></summary>
+    <div class="more__body">
     <ul class="bullets">
       <li><b>Every deviation has a period.</b> Start and end dates are mandatory in practice: inside 30 days of the end the row reads <b>Expiring</b>, past the end it reads <b>Expired</b> until it is renewed or revoked.</li>
       <li><b>Extending is an approval, not a date edit.</b> The period end can only move through <b>Renew</b>, which is limited to managers and administrators and records the new end, the approver, the moment and the reason. The previous end date stays in the audit trail.</li>
@@ -398,5 +417,6 @@ function exc_url(array $over): string
         </li>
       <?php endforeach; ?>
     </ul>
-  </section>
+    </div>
+  </details>
 </div>

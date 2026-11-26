@@ -703,6 +703,9 @@ ul, ol { padding: 0; list-style: none; }
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
+  /* Square cells: on a wide page an uncapped grid made each of the 25 cells
+     the size of a card. */
+  max-width: 440px;
 }
 .heat__cell {
   aspect-ratio: 1 / 1;
@@ -980,6 +983,9 @@ ul, ol { padding: 0; list-style: none; }
 .tagchip.is-on { background: var(--blue); border-color: var(--blue); color: #fff; }
 
 .cell-issue__head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Location, department and owner are a second line under the title, not the
+   tail of it: run together they read as one long sentence. */
+.cell-issue__sub { display: block; margin-top: 1px; font-size: 11.5px; color: var(--ink-3); }
 .cell-issue__tags { display: flex; flex-wrap: wrap; gap: 0; margin-top: 2px; }
 .report-head__tags { display: flex; flex-wrap: wrap; gap: 0; margin-top: 5px; }
 .nav__tags { display: flex; flex-wrap: wrap; gap: 0; padding: 0 6px; }
@@ -1360,3 +1366,290 @@ html[data-density="compact"] .table td { padding: 5px 8px; }
 .rev__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
 .rev > details { margin-top: 3px; }
 .rev > details > summary { display: inline-block; cursor: pointer; }
+
+/* ------------------------------------------- simple / detailed display ---- */
+
+/* Simple is the default view: a page shows the layer needed to do the work,
+   and its second layer — filters, explainers, extra counters, coverage charts
+   and secondary columns — is one click away in the block that holds it.
+   Detailed shows everything at once. The choice is remembered per browser,
+   like the theme and the density, and changes no feature, only what is open. */
+
+.more {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  padding: 0;
+  overflow: hidden;
+}
+.more > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::before {
+  content: "+";
+  flex: 0 0 14px;
+  text-align: center;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.more[open] > summary::before { content: "\2212"; }
+.more > summary:hover { background: #fbfbfd; }
+.more[open] > summary { border-bottom: 1px solid var(--line); background: #fcfcfd; }
+.more__hint { margin-left: auto; font-weight: 400; font-size: 11.5px; color: var(--ink-3); }
+.more__body { padding: 12px 14px; }
+.more__body > .grid--stats {
+  margin: 0;
+  /* Five counters under a four-column grid left the fifth alone in a row. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.more--inner {
+  border: 1px dashed var(--line);
+  box-shadow: none;
+  background: transparent;
+  margin-top: 12px;
+}
+.more--inner > summary { padding: 8px 11px; font-weight: 500; color: var(--ink-2); }
+.more--inner[open] > summary { background: transparent; }
+
+/* A filter cluster is one line until it is opened or a filter is active. */
+.filters {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.filters > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.filters > summary::-webkit-details-marker { display: none; }
+.filters > summary::before { content: "\2261"; color: var(--ink-3); }
+.filters > summary:hover { color: var(--ink); }
+.filters[open] > summary { border-bottom: 1px solid var(--line-2); }
+.filters__body { display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 12px; }
+.filters__state { margin-left: auto; font-weight: 400; font-size: 11.5px; color: var(--blue); }
+
+/* The second layer: hidden in Simple until its block is opened, and always
+   present in Detailed and in the printed/exported markup. */
+[data-detail="simple"] .col-secondary,
+[data-detail="simple"] .hide-simple { display: none; }
+
+/* A register shown in Simple keeps its title cell readable: the secondary
+   columns return the width they used. */
+[data-detail="simple"] .table--list td.cell-issue { max-width: 520px; }
+
+/* A filter block inside a flush list card is part of that card: same edge,
+   no second shadow. */
+.card--flush > .filters {
+  margin: 0 14px 12px;
+  border-color: var(--line-2);
+  box-shadow: none;
+  background: #fcfcfd;
+}
+
+/* Paired cards keep their own height instead of stretching to fill the row,
+   which left a slab of empty card under the shorter column. */
+.grid--start { align-items: start; }
+
+/* The report page reads top to bottom in one column, numbered 1–6, so the
+   short panels (persons, remediation) never leave a hole beside the long
+   detail form. */
+.grid--report { grid-template-columns: minmax(0, 1fr); }
+
+/* The OT register labels its first column by date; a phone shows only the
+   reference code under it, so the short label is swapped in there. */
+.ot-th-phone { display: none; }
+
+/* ------------------------------------------------------ narrow screens --- */
+
+@media (max-width: 700px) {
+  /* Label/value pairs drop from two pairs per row to one, so the report
+     form's metadata stops reading as four cramped columns. */
+  .kv--two { grid-template-columns: auto 1fr; }
+
+  /* A collapsed block puts its hint under the title instead of squeezing
+     the title into the width the hint leaves. */
+  .more > summary { flex-wrap: wrap; }
+  .more__hint { flex-basis: 100%; margin-left: 22px; }
+
+  /* A register keeps its title cell readable and scrolls sideways; left to
+     shrink, a title broke over four or five lines. */
+  .card--flush > .table { min-width: 0; }
+  .table th, .table td { padding: 6px 7px; }
+  .table--list td.cell-issue { min-width: 195px; }
+  .cell-title { min-width: 200px; }
+  /* A target that is a URL wraps instead of running off the edge. */
+  .cell-issue__sub.mono { white-space: normal; overflow-wrap: anywhere; }
+
+  /* The OT register opens with the finding: on a phone the confirmation
+     date is the least useful column, the code under it stays. */
+  .ot-date, .ot-th-full { display: none; }
+  .ot-th-phone { display: inline; }
+  .table--ot .ot-site { white-space: normal; }
+
+  /* In Simple the register drops the row number and the numeric risk so the
+     status control — the one thing changed from the list — stays on screen. */
+  [data-detail="simple"] .col-phone { display: none; }
+}
+
+/* ================================================ density: quick wins === */
+
+/* 1 · Summary bar ---------------------------------------------------------- */
+
+/* The headline numbers as one line of posture instead of four 130px cards.
+   Every figure keeps its label and its hint; only the card chrome goes. */
+.statbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px 26px;
+  padding: 10px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.statbar .stat {
+  flex: 1 1 150px;
+  padding: 0 0 0 10px;
+  border: 0;
+  border-left: 3px solid var(--line);
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.statbar .stat::after { display: none; }
+.statbar .stat--blue { border-left-color: var(--blue); }
+.statbar .stat--red { border-left-color: var(--red); }
+.statbar .stat--orange { border-left-color: var(--orange); }
+.statbar .stat--neutral { border-left-color: var(--ink-3); }
+.statbar .stat__label { font-size: 10.5px; }
+.statbar .stat__value { font-size: 18px; margin-top: 1px; }
+.statbar .stat__hint { font-size: 11px; margin-top: 1px; }
+
+/* 2 · One toolbar: search, filters, count and the page action -------------- */
+
+.toolbar--filters {
+  position: relative;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.toolbar--filters .search { flex: 1 1 260px; }
+.toolbar--filters .search input[type="search"] { flex: 1 1 auto; min-width: 0; }
+.countchip { margin-left: auto; white-space: nowrap; font-size: 11.5px; color: var(--ink-3); }
+
+/* The filter cluster is a button in the bar; its panel drops under the bar
+   instead of pushing the table down. */
+.filters--pop { border: 0; background: none; box-shadow: none; }
+.filters--pop > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.filters--pop > summary:hover { border-color: var(--ink-3); color: var(--ink); }
+.filters--pop > summary::before { content: "\2261"; color: var(--ink-3); font-weight: 700; }
+.filters--pop[open] > summary { border-color: var(--ink); color: var(--ink); }
+.filters--pop > .filters__body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 26px 50px -26px rgba(16, 18, 22, .5);
+}
+
+/* What is filtered, in one line the user can undo chip by chip. */
+.activefilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+.activefilters__label { font-size: 11.5px; color: var(--ink-3); }
+.activefilters .chip { text-decoration: none; }
+
+/* 3 · Create forms in a drawer ------------------------------------------- */
+
+/* With JavaScript the create form opens in the drawer; the inline block is
+   the no-JS fallback and stays visible when the server opens it (?new=1). */
+html.js .panel--create:not([open]) { display: none; }
+html.js .modal-source { display: none; }
+html.js .modal__body .modal-source { display: block; }
+html.js .panel--create[open] .modal-source { display: block; }
+
+.modal--drawer { justify-content: flex-end; padding: 0; }
+/* The create form keeps its .card chrome for the inline no-JS fallback only;
+   inside the drawer the panel already provides the surface. */
+.modal--drawer .modal__body .card { border: 0; border-radius: 0; box-shadow: none; padding: 0; margin: 0; background: transparent; }
+.modal--drawer .modal__panel {
+  width: min(560px, 100%);
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  border-top: 0;
+  border-bottom: 0;
+  animation: drawer-in .16s ease-out;
+}
+@keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } }
+.modal--drawer .modal__body { padding: 16px; }
+.modal--drawer .form__actions {
+  position: sticky;
+  bottom: -16px;
+  padding: 10px 0 6px;
+  background: var(--card);
+  border-top: 1px solid var(--line-2);
+}
+
+@media (max-width: 700px) {
+  .statbar { gap: 8px 14px; padding: 9px 12px; }
+  .statbar .stat { flex: 1 1 calc(50% - 14px); }
+
+  .toolbar--filters { position: static; }
+  .filters--pop { flex: 1 1 100%; }
+  .filters--pop > .filters__body {
+    position: static;
+    padding: 10px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line-2);
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .modal--drawer { align-items: stretch; }
+  .modal--drawer .modal__panel { max-height: none; border-radius: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal--drawer .modal__panel { animation: none; }
+}
+

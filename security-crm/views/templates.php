@@ -57,11 +57,19 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
     <button type="submit" class="btn btn--ghost">Search</button>
     <?php if ($cat || $q !== ''): ?><a class="btn btn--ghost" href="?page=templates">Clear</a><?php endif; ?>
   </form>
+
+  <span class="countchip"><?= count($rows) ?> template<?= count($rows) === 1 ? '' : 's' ?></span>
+
+  <?php if ($canEdit): ?>
+    <a class="btn btn--primary btn--sm" href="?page=templates&amp;new=1"
+       data-modal-node="new-template-form" data-modal-drawer data-modal-title="New form template">+ New template</a>
+  <?php endif; ?>
 </div>
 
 <?php if ($canEdit): ?>
-<details class="panel" <?= isset($_GET['new']) ? 'open' : '' ?>>
+<details class="panel panel--create" id="new-template-panel" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary class="btn btn--primary btn--summary btn--sm">+ New template</summary>
+  <div class="modal-source" id="new-template-form">
   <form class="card form" method="post" action="index.php">
     <?= csrf_field() ?>
     <?= once_field() ?>
@@ -85,6 +93,7 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
       <span class="muted">Open the template afterwards to edit the full body.</span>
     </div>
   </form>
+  </div>
 </details>
 <?php endif; ?>
 
@@ -104,7 +113,7 @@ $catTone = ['Legal' => 'blue', 'HR' => 'orange', 'Security' => 'red', 'Audit' =>
       <h3 class="tpl__name"><a href="?page=template&amp;id=<?= (int) $t['id'] ?>"><?= e($t['name']) ?></a></h3>
       <p class="tpl__desc"><?= e($t['description']) ?></p>
 
-      <dl class="tpl__meta">
+      <dl class="tpl__meta hide-simple">
         <div><dt>Owner</dt><dd><?= e($t['owner']) ?: '—' ?></dd></div>
         <div><dt>Placeholders</dt><dd><?= count(placeholders_of((string) $t['body'])) ?></dd></div>
         <div><dt>Downloads</dt><dd><?= (int) $t['downloads'] ?></dd></div>

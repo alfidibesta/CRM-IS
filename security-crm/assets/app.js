@@ -368,6 +368,51 @@
     });
   }
 
+  /* Simple / Detailed display.
+   *
+   * Simple is the default: the second layer of a page (filter clusters,
+   * explainers, extra counters, coverage charts) sits in a closed <details>.
+   * Detailed opens every block tagged data-more. A block the server opened
+   * because a filter is active carries data-more-keep, so switching views
+   * never hides the result of a search. */
+  var detailBtn = doc.querySelector('[data-detail-toggle]');
+  /* Create panels and the filter popover are controls, not the second layer of
+     the page: Detailed must not force a form or a panel open. */
+  var moreBlocks = doc.querySelectorAll('details[data-more]:not(.panel--create):not(.filters--pop)');
+
+  function isDetailed() {
+    return root.dataset.detail === 'detailed';
+  }
+
+  function paintDetail() {
+    if (!detailBtn) return;
+    detailBtn.textContent = isDetailed() ? 'Simple view' : 'Detailed view';
+    detailBtn.setAttribute('aria-pressed', isDetailed() ? 'true' : 'false');
+    detailBtn.title = isDetailed()
+      ? 'Hide the second layer again — one detail block per page'
+      : 'Open every filter, column and explainer at once';
+  }
+
+  function applyDetail() {
+    var open = isDetailed();
+    moreBlocks.forEach(function (box) {
+      if (box.hasAttribute('data-more-keep')) return;
+      box.open = open;
+    });
+  }
+
+  if (detailBtn) {
+    detailBtn.addEventListener('click', function () {
+      root.dataset.detail = isDetailed() ? 'simple' : 'detailed';
+      remember('secops-detail', root.dataset.detail);
+      paintDetail();
+      applyDetail();
+    });
+  }
+
+  paintDetail();
+  applyDetail();
+
   paintToggles();
 
   // Collapsible panels remember their state per browser, per panel.
@@ -468,6 +513,8 @@
     modalTitle.textContent = trigger.getAttribute('data-modal-title') || 'Edit';
     modal.hidden = false;
     doc.documentElement.classList.add('is-modal');
+    modal.classList.remove('modal--wide', 'modal--drawer');
+    if (trigger.hasAttribute('data-modal-drawer')) modal.classList.add('modal--drawer');
 
     var nodeId = trigger.getAttribute('data-modal-node');
     var url = trigger.getAttribute('data-modal-url');
@@ -480,12 +527,11 @@
       src.parentNode.insertBefore(modalHome, src);
       src.hidden = false;
       modalBody.appendChild(src);
-      modal.classList.add('modal--wide');
+      if (!modal.classList.contains('modal--drawer')) modal.classList.add('modal--wide');
       focusFirstField();
       return;
     }
 
-    modal.classList.remove('modal--wide');
     modalBody.innerHTML = '<p class="muted">Loading the form…</p>';
 
     fetch(url, { credentials: 'same-origin' })

@@ -20,7 +20,7 @@ $stats = [
 ];
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--blue">
     <p class="stat__label">Accounts</p>
     <p class="stat__value"><?= $stats['total'] ?></p>
@@ -49,12 +49,16 @@ $stats = [
     <header class="card__head">
       <h2>Accounts</h2>
       <span class="muted"><?= count($users) ?> user<?= count($users) === 1 ? '' : 's' ?></span>
+      <?php if ($canManage): ?>
+        <a class="btn btn--primary btn--sm" href="?page=users&amp;new=1"
+           data-modal-node="new-user-form" data-modal-drawer data-modal-title="Add a user">+ Add user</a>
+      <?php endif; ?>
     </header>
 
     <div class="table-wrap">
       <table class="table table--tight">
         <thead>
-          <tr><th>User</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr>
+          <tr><th>User</th><th>Role</th><th>Status</th><th class="col-secondary">Last sign-in</th><th></th></tr>
         </thead>
         <tbody>
         <?php foreach ($users as $u): ?>
@@ -86,7 +90,7 @@ $stats = [
                 <span class="muted"><?= (int) $u['failed_attempts'] ?> failed</span>
               <?php endif; ?>
             </td>
-            <td class="nowrap"><?= $u['last_login'] ? date('d M Y · H:i', strtotime((string) $u['last_login'])) : 'never' ?></td>
+            <td class="nowrap col-secondary"><?= $u['last_login'] ? date('d M Y · H:i', strtotime((string) $u['last_login'])) : 'never' ?></td>
             <td class="right">
               <?php if ($canManage): ?>
                 <a class="btn btn--ghost btn--xs" href="#"
@@ -148,8 +152,9 @@ $stats = [
     </div>
 
     <?php if ($canManage): ?>
-      <details class="panel panel--sub" <?= count($users) < 2 ? 'open' : '' ?>>
+      <details class="panel panel--sub panel--create" id="new-user" <?= (count($users) < 2 || isset($_GET['new'])) ? 'open' : '' ?>>
         <summary class="btn btn--ghost btn--summary btn--sm">+ Add user</summary>
+        <div class="modal-source" id="new-user-form">
         <form class="form form--sub" method="post" action="index.php">
           <?= csrf_field() ?>
           <?= once_field() ?>
@@ -178,6 +183,7 @@ $stats = [
             <button type="submit" class="btn btn--primary btn--sm">Create account</button>
           </div>
         </form>
+        </div>
       </details>
     <?php endif; ?>
   </section>
@@ -207,11 +213,9 @@ $stats = [
       <?php endforeach; ?>
     </div>
 
-    <header class="card__head card__head--sub">
-      <h3>Authority matrix</h3>
-      <span class="muted">✓ = allowed</span>
-    </header>
-
+    <details class="more more--inner" data-more>
+      <summary>Authority matrix <span class="more__hint"><?= count($perms) ?> permissions · ✓ = allowed</span></summary>
+      <div class="more__body">
     <div class="table-wrap table-wrap--scroll">
       <table class="table table--tight table--matrix">
         <thead>
@@ -235,17 +239,19 @@ $stats = [
         </tbody>
       </table>
     </div>
+      </div>
+    </details>
   </section>
 </div>
 
-<section class="card">
-  <header class="card__head">
-    <h2>How authority is enforced</h2>
-  </header>
-  <ul class="bullets">
-    <li>Every page and every POST action is checked against the signed-in role before it runs — a missing permission returns <b>403</b>.</li>
-    <li>Sign-in issues a new session id, all forms carry a CSRF token, and 5 failed passwords lock the account for 15 minutes.</li>
-    <li>Passwords are stored as bcrypt hashes; evidence files are served only through a permission-checked download route.</li>
-    <li>Changing a role takes effect on that user's next request — no restart needed.</li>
-  </ul>
-</section>
+<details class="more" data-more>
+  <summary>How authority is enforced <span class="more__hint">roles, CSRF, lockout</span></summary>
+  <div class="more__body">
+    <ul class="bullets">
+      <li>Every page and every POST action is checked against the signed-in role before it runs — a missing permission returns <b>403</b>.</li>
+      <li>Sign-in issues a new session id, all forms carry a CSRF token, and 5 failed passwords lock the account for 15 minutes.</li>
+      <li>Passwords are stored as bcrypt hashes; evidence files are served only through a permission-checked download route.</li>
+      <li>Changing a role takes effect on that user's next request — no restart needed.</li>
+    </ul>
+  </div>
+</details>

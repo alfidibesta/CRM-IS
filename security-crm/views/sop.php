@@ -117,7 +117,7 @@ $history     = sop_revision_history($pdo, array_column($rows, 'id'));
 $canAck      = can('sop.acknowledge');
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--blue">
     <p class="stat__label">Controlled documents</p>
     <p class="stat__value"><?= $sopStats['all'] ?></p>
@@ -140,21 +140,7 @@ $canAck      = can('sop.acknowledge');
   </article>
 </section>
 
-<div class="toolbar">
-  <div class="chips chips--filter">
-    <a class="chip <?= !$type ? 'is-on' : '' ?>" href="<?= e(chip_url(['type' => ''])) ?>">All <b><?= $counts['all'] ?></b></a>
-    <?php foreach (['Policy', 'SOP', 'Guideline'] as $t): ?>
-      <a class="chip <?= $type === $t ? 'is-on' : '' ?>" href="<?= e(chip_url(['type' => $t])) ?>"><?= $t ?> <b><?= $counts[$t] ?></b></a>
-    <?php endforeach; ?>
-  </div>
-
-  <div class="chips chips--filter">
-    <span class="chips__label">Scope</span>
-    <?php foreach (['Physical', 'IT', 'Strain', 'General'] as $s): ?>
-      <a class="chip chip--<?= scope_tone($s) ?> <?= $scope === $s ? 'is-on' : '' ?>" href="<?= e(chip_url(['scope' => $scope === $s ? '' : $s])) ?>"><?= $s ?></a>
-    <?php endforeach; ?>
-  </div>
-
+<div class="toolbar toolbar--filters">
   <form class="search" method="get" action="index.php">
     <input type="hidden" name="page" value="sop">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search code, title, owner…">
@@ -164,14 +150,61 @@ $canAck      = can('sop.acknowledge');
     <?php endif; ?>
   </form>
 
+  <details class="filters filters--pop">
+    <summary>Filters<?= ($type !== '' || $scope !== '' || $status !== '') ? ' · on' : '' ?></summary>
+    <div class="filters__body">
+    <div class="chips chips--filter">
+      <a class="chip <?= !$type ? 'is-on' : '' ?>" href="<?= e(chip_url(['type' => ''])) ?>">All <b><?= $counts['all'] ?></b></a>
+      <?php foreach (['Policy', 'SOP', 'Guideline'] as $t): ?>
+        <a class="chip <?= $type === $t ? 'is-on' : '' ?>" href="<?= e(chip_url(['type' => $t])) ?>"><?= $t ?> <b><?= $counts[$t] ?></b></a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="chips chips--filter">
+      <span class="chips__label">Scope</span>
+      <?php foreach (['Physical', 'IT', 'Strain', 'General'] as $s): ?>
+        <a class="chip chip--<?= scope_tone($s) ?> <?= $scope === $s ? 'is-on' : '' ?>" href="<?= e(chip_url(['scope' => $scope === $s ? '' : $s])) ?>"><?= $s ?></a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="chips chips--filter">
+      <span class="chips__label">Status</span>
+      <?php foreach (['Active', 'Draft', 'In Review', 'Obsolete'] as $s): ?>
+        <a class="chip chip--<?= status_tone($s) ?> <?= $status === $s ? 'is-on' : '' ?>" href="<?= e(chip_url(['status' => $status === $s ? '' : $s])) ?>"><?= $s ?></a>
+      <?php endforeach; ?>
+    </div>
+    </div>
+  </details>
+
+  <span class="countchip"><?= count($rows) ?> document<?= count($rows) === 1 ? '' : 's' ?></span>
+
   <?php if ($canTemplate): ?>
     <a class="btn btn--ghost btn--sm" href="?page=templates&amp;new=1">+ New template</a>
   <?php endif; ?>
+  <?php if ($canManage && !$edit): ?>
+    <a class="btn btn--primary btn--sm" href="?page=sop&amp;new=1"
+       data-modal-node="new-sop-form" data-modal-drawer data-modal-title="New controlled document">+ New document</a>
+  <?php endif; ?>
 </div>
 
+<?php if ($type !== '' || $scope !== '' || $status !== '' || $q !== ''): ?>
+<p class="activefilters">
+  <span class="activefilters__label">Showing</span>
+  <?php foreach ([['type', 'Type', $type], ['scope', 'Scope', $scope], ['status', 'Status', $status]] as [$key, $label, $value]): ?>
+    <?php if ($value === '') continue; ?>
+    <a class="chip is-on" href="<?= e(chip_url([$key => ''])) ?>" title="Remove this filter"><?= e($label) ?>: <?= e($value) ?> <span aria-hidden="true">×</span></a>
+  <?php endforeach; ?>
+  <?php if ($q !== ''): ?>
+    <a class="chip is-on" href="<?= e(chip_url(['q' => ''])) ?>" title="Clear the search">Search: <?= e($q) ?> <span aria-hidden="true">×</span></a>
+  <?php endif; ?>
+  <a class="link" href="?page=sop">Clear all</a>
+</p>
+<?php endif; ?>
+
 <?php if ($canManage): ?>
-  <details class="panel" <?= ($edit || $draft || isset($_GET['new'])) ? 'open' : '' ?>>
+  <details class="panel panel--create" id="new-document" <?= ($edit || $draft || isset($_GET['new'])) ? 'open' : '' ?>>
     <summary class="btn btn--primary btn--summary btn--sm"><?= $edit ? 'Edit ' . e((string) $edit['code']) : '+ New document' ?></summary>
+    <div class="modal-source" id="new-sop-form">
     <form class="card form" method="post" action="index.php">
       <?= csrf_field() ?>
       <?php if (!$edit): ?><?= once_field() ?><?php endif; ?>
@@ -222,6 +255,7 @@ $canAck      = can('sop.acknowledge');
         <span class="muted">Every save is audited and kept as a version. A save resets acknowledgements, so readers are asked to re-read it. Mark a superseded document Obsolete rather than deleting it.</span>
       </div>
     </form>
+    </div>
 
     <?php if ($edit): ?>
       <form class="inline-form inline-form--danger" method="post" action="index.php" data-confirm="Delete this document permanently?">
@@ -242,11 +276,11 @@ $canAck      = can('sop.acknowledge');
         <th class="num">#</th>
         <th>Code</th>
         <th>Title</th>
-        <th>Type</th>
+        <th class="col-secondary">Type</th>
         <th>Scope</th>
         <th>Ver</th>
-        <th>Owner</th>
-        <th>Effective</th>
+        <th class="col-secondary">Owner</th>
+        <th class="col-secondary">Effective</th>
         <th>Next review</th>
         <th>Status</th>
         <th>Read</th>
@@ -340,11 +374,11 @@ $canAck      = can('sop.acknowledge');
             </div>
           </details>
         </td>
-        <td><?= badge($r['type'], $r['type'] === 'Policy' ? 'blue' : ($r['type'] === 'SOP' ? 'orange' : 'neutral')) ?></td>
+        <td class="col-secondary"><?= badge($r['type'], $r['type'] === 'Policy' ? 'blue' : ($r['type'] === 'SOP' ? 'orange' : 'neutral')) ?></td>
         <td><span class="tag tag--<?= scope_tone($r['scope']) ?>"><?= e($r['scope']) ?></span></td>
         <td class="mono">v<?= e($r['version']) ?></td>
-        <td class="nowrap"><?= e($r['owner']) ?></td>
-        <td class="nowrap"><?= fmt_date($r['effective_at']) ?></td>
+        <td class="nowrap col-secondary"><?= e($r['owner']) ?></td>
+        <td class="nowrap col-secondary"><?= fmt_date($r['effective_at']) ?></td>
         <td class="nowrap"><?= fmt_date($r['review_at']) ?></td>
         <td><?= badge($r['status'], status_tone($r['status'])) ?></td>
         <td class="nowrap">

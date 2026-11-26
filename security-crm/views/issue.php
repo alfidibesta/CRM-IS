@@ -39,6 +39,8 @@ $canDownload = can('file.download');
 
 $openTasks = count(array_filter($tasks, fn($t) => $t['column_key'] !== 'done'));
 $noteCount = count(array_filter($events, fn($e) => $e['kind'] === 'note'));
+$eventHead = array_slice($events, 0, 6);
+$eventRest = array_slice($events, 6);
 
 // Report form: which template this report follows and the layout in force.
 $rctx       = ['suspects' => $suspects, 'files' => $files, 'tasks' => $tasks, 'events' => $events];
@@ -144,15 +146,23 @@ $allTags    = known_tags($pdo);
         </dd>
       </dl>
 
-      <div class="keychips">
-        <?php foreach (['CODE', 'TITLE', 'CATEGORY', 'SEVERITY', 'STATUS', 'OWNER', 'LOCATION', 'DEPARTMENT', 'ASSET', 'REPORTED_BY', 'REPORTED_AT', 'DUE_AT', 'RISK_SCORE', 'RISK_RATING', 'LIKELIHOOD', 'IMPACT', 'ROOT_CAUSE', 'IMMEDIATE_ACTION', 'CORRECTIVE_ACTION', 'DESCRIPTION', 'TAGS', 'REVIEWER', 'APPROVER', 'TODAY'] as $k): ?>
-          <code>{{<?= e($k) ?>}}</code>
-        <?php endforeach; ?>
-      </div>
+      <details class="more more--inner">
+        <summary>Placeholder keys <span class="more__hint">24 available</span></summary>
+        <div class="more__body">
+          <div class="keychips">
+            <?php foreach (['CODE', 'TITLE', 'CATEGORY', 'SEVERITY', 'STATUS', 'OWNER', 'LOCATION', 'DEPARTMENT', 'ASSET', 'REPORTED_BY', 'REPORTED_AT', 'DUE_AT', 'RISK_SCORE', 'RISK_RATING', 'LIKELIHOOD', 'IMPACT', 'ROOT_CAUSE', 'IMMEDIATE_ACTION', 'CORRECTIVE_ACTION', 'DESCRIPTION', 'TAGS', 'REVIEWER', 'APPROVER', 'TODAY'] as $k): ?>
+              <code>{{<?= e($k) ?>}}</code>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </details>
     </div>
 
     <div class="reportform__edit">
       <?php if ($canEdit): ?>
+        <details class="more more--inner" data-more>
+          <summary>Change the form or adjust the layout</summary>
+          <div class="more__body">
         <form class="form form--sub" method="post" action="index.php">
           <?= csrf_field() ?>
           <input type="hidden" name="action" value="update_issue_report">
@@ -184,6 +194,8 @@ $allTags    = known_tags($pdo);
           </div>
           <p class="footnote">Choosing another form re-seeds the layout from that form. Reset drops the per-report adjustment.</p>
         </form>
+          </div>
+        </details>
       <?php else: ?>
         <p class="readnote">Read-only role — download the report to see it rendered with this form.</p>
       <?php endif; ?>
@@ -241,40 +253,47 @@ $allTags    = known_tags($pdo);
           <label class="field"><span>Owner</span>
             <input type="text" name="owner" maxlength="100" value="<?= e($issue['owner']) ?>">
           </label>
-          <label class="field"><span>Location</span>
-            <input type="text" name="location" maxlength="120" value="<?= e($issue['location']) ?>">
-          </label>
-          <label class="field"><span>Department</span>
-            <input type="text" name="department" maxlength="100" value="<?= e($issue['department']) ?>">
-          </label>
-          <label class="field field--wide"><span>Asset or system</span>
-            <input type="text" name="asset" maxlength="140" value="<?= e($issue['asset']) ?>"
-                   placeholder="e.g. HMI-03 (10.20.4.31), east gate turnstile">
-          </label>
-          <label class="field"><span>Reported by</span>
-            <input type="text" name="reported_by" maxlength="100" value="<?= e($issue['reported_by']) ?>">
-          </label>
-          <label class="field"><span>Reported on</span>
-            <input type="date" name="reported_at" value="<?= e($issue['reported_at']) ?>">
-          </label>
-          <label class="field"><span>Target close</span>
-            <input type="date" name="due_at" value="<?= e($issue['due_at']) ?>">
-          </label>
-          <label class="field"><span>Reviewed by</span>
-            <input type="text" name="reviewed_by" maxlength="100" value="<?= e($issue['reviewed_by']) ?>">
-          </label>
-          <label class="field"><span>Approved by</span>
-            <input type="text" name="approved_by" maxlength="100" value="<?= e($issue['approved_by']) ?>">
-          </label>
-          <label class="field field--wide"><span>Tags <span class="muted">(comma separated, max 6)</span></span>
-            <input type="text" name="tags" maxlength="200" list="tag-suggest" value="<?= e($issue['tags']) ?>"
-                   placeholder="e.g. ot-network, segmentation, after-hours">
-          </label>
-
           <label class="field field--wide"><span>Description &amp; observation</span>
             <textarea name="description" rows="6" placeholder="What was observed, when, where and by whom"><?= e($issue['description']) ?></textarea>
           </label>
         </div>
+
+        <details class="more more--inner">
+          <summary>Location, people and dates</summary>
+          <div class="more__body">
+            <div class="form__grid">
+              <label class="field"><span>Location</span>
+                <input type="text" name="location" maxlength="120" value="<?= e($issue['location']) ?>">
+              </label>
+              <label class="field"><span>Department</span>
+                <input type="text" name="department" maxlength="100" value="<?= e($issue['department']) ?>">
+              </label>
+              <label class="field field--wide"><span>Asset or system</span>
+                <input type="text" name="asset" maxlength="140" value="<?= e($issue['asset']) ?>"
+                       placeholder="e.g. HMI-03 (10.20.4.31), east gate turnstile">
+              </label>
+              <label class="field"><span>Reported by</span>
+                <input type="text" name="reported_by" maxlength="100" value="<?= e($issue['reported_by']) ?>">
+              </label>
+              <label class="field"><span>Reported on</span>
+                <input type="date" name="reported_at" value="<?= e($issue['reported_at']) ?>">
+              </label>
+              <label class="field"><span>Target close</span>
+                <input type="date" name="due_at" value="<?= e($issue['due_at']) ?>">
+              </label>
+              <label class="field"><span>Reviewed by</span>
+                <input type="text" name="reviewed_by" maxlength="100" value="<?= e($issue['reviewed_by']) ?>">
+              </label>
+              <label class="field"><span>Approved by</span>
+                <input type="text" name="approved_by" maxlength="100" value="<?= e($issue['approved_by']) ?>">
+              </label>
+              <label class="field field--wide"><span>Tags <span class="muted">(comma separated, max 6)</span></span>
+                <input type="text" name="tags" maxlength="200" list="tag-suggest" value="<?= e($issue['tags']) ?>"
+                       placeholder="e.g. ot-network, segmentation, after-hours">
+              </label>
+            </div>
+          </div>
+        </details>
 
         <header class="card__head card__head--sub"><h3>2 · Risk assessment</h3></header>
         <div class="form__grid form__grid--risk">
@@ -307,16 +326,21 @@ $allTags    = known_tags($pdo);
             }
         }
         ?>
-        <div class="heat" id="risk-heatmap" aria-hidden="true">
-          <div class="heat__axis">Impact →</div>
-          <div class="heat__grid"><?= $cells ?></div>
-          <div class="heat__legend">
-            <span class="heat__leg heat--green">1–4 Low</span>
-            <span class="heat__leg heat--blue">5–9 Moderate</span>
-            <span class="heat__leg heat--orange">10–15 High</span>
-            <span class="heat__leg heat--red">16–25 Critical</span>
+        <details class="more more--inner" data-more>
+          <summary>Risk matrix <span class="more__hint">5 × 5 · where this score sits</span></summary>
+          <div class="more__body">
+            <div class="heat" id="risk-heatmap" aria-hidden="true">
+              <div class="heat__axis">Impact →</div>
+              <div class="heat__grid"><?= $cells ?></div>
+              <div class="heat__legend">
+                <span class="heat__leg heat--green">1–4 Low</span>
+                <span class="heat__leg heat--blue">5–9 Moderate</span>
+                <span class="heat__leg heat--orange">10–15 High</span>
+                <span class="heat__leg heat--red">16–25 Critical</span>
+              </div>
+            </div>
           </div>
-        </div>
+        </details>
 
         <div class="form__grid">
           <label class="field field--wide"><span>Root cause</span>
@@ -573,7 +597,7 @@ $allTags    = known_tags($pdo);
   <?php endif; ?>
 
   <ol class="timeline">
-    <?php foreach ($events as $ev): ?>
+    <?php foreach ($eventHead as $ev): ?>
       <li class="timeline__item timeline__item--<?= e($ev['kind']) ?>">
         <span class="timeline__dot"></span>
         <div class="timeline__body">
@@ -587,4 +611,24 @@ $allTags    = known_tags($pdo);
       <li class="timeline__item"><div class="timeline__body"><p class="muted">No activity recorded.</p></div></li>
     <?php endif; ?>
   </ol>
+
+  <?php if ($eventRest): ?>
+  <details class="more more--inner">
+    <summary>Earlier activity <span class="more__hint"><?= count($eventRest) ?> more entries</span></summary>
+    <div class="more__body">
+      <ol class="timeline">
+        <?php foreach ($eventRest as $ev): ?>
+          <li class="timeline__item timeline__item--<?= e($ev['kind']) ?>">
+            <span class="timeline__dot"></span>
+            <div class="timeline__body">
+              <p class="timeline__text"><?= e($ev['message']) ?></p>
+              <p class="timeline__meta"><?= e($ev['actor']) ?> · <?= date('d M Y · H:i', strtotime((string) $ev['created_at'])) ?></p>
+            </div>
+            <span class="timeline__kind"><?= e($ev['kind']) ?></span>
+          </li>
+        <?php endforeach; ?>
+      </ol>
+    </div>
+  </details>
+  <?php endif; ?>
 </section>

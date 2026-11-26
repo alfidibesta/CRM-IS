@@ -425,6 +425,13 @@ spacing. Both choices are stored in the browser (not in the account), are
 applied before the first paint so nothing flashes, and never change layout.
 **Compact** trims padding, table rows and gaps; **Dim** is the dark palette.
 
+**Simple or detailed.** **Detailed view** in the top bar opens every filter
+cluster, explainer, coverage chart and secondary column at once. **Simple
+view** — the default — shows only the layer a page needs to do its work, and
+each second layer opens with one click on its own block. The choice is
+remembered per browser and hides no feature: a closed block still submits its
+fields, and a filter that is active opens its own block automatically.
+
 **Collapsible panels.** Detail panels — an issue's report form, the exception
 categories, the log tail — are native `<details>` elements that remember
 whether you left them open.

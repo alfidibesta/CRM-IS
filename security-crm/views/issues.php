@@ -63,7 +63,7 @@ $canCreate = can('issue.create');
 $canExport = can('issue.export');
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--red">
     <p class="stat__label">Open issues</p>
     <p class="stat__value"><?= $stats['open'] ?></p>
@@ -87,8 +87,9 @@ $canExport = can('issue.export');
 </section>
 
 <?php if ($canCreate): ?>
-<details class="panel" <?= isset($_GET['new']) ? 'open' : '' ?>>
+<details class="panel panel--create" id="new-issue" <?= isset($_GET['new']) ? 'open' : '' ?>>
   <summary class="btn btn--primary btn--summary">+ Report new issue</summary>
+  <div class="modal-source" id="new-issue-form">
   <form class="card form" method="post" action="index.php">
     <?= csrf_field() ?>
     <?= once_field() ?>
@@ -121,31 +122,39 @@ $canExport = can('issue.export');
           <?php for ($i = 1; $i <= 5; $i++): ?><option value="<?= $i ?>" <?= $i === 3 ? 'selected' : '' ?>><?= e(impact_label($i)) ?></option><?php endfor; ?>
         </select>
       </label>
-      <label class="field"><span>Owner</span><input type="text" name="owner" maxlength="100" placeholder="Name"></label>
-      <label class="field"><span>Location</span><input type="text" name="location" maxlength="120" placeholder="Plant / line / room"></label>
-      <label class="field"><span>Department</span><input type="text" name="department" maxlength="100"></label>
-      <label class="field"><span>Asset / system</span><input type="text" name="asset" maxlength="140"></label>
-      <label class="field"><span>Reported by</span><input type="text" name="reported_by" maxlength="100" value="<?= e(current_user_name()) ?>"></label>
-      <label class="field"><span>Reported</span><input type="date" name="reported_at" value="<?= date('Y-m-d') ?>"></label>
-      <label class="field"><span>Due</span><input type="date" name="due_at"></label>
-      <label class="field field--wide"><span>Tags <span class="muted">(comma separated, max 6)</span></span>
-        <input type="text" name="tags" maxlength="200" list="tag-suggest" placeholder="e.g. tailgating, gate, logistics">
-      </label>
-      <label class="field field--wide"><span>Report form template <span class="muted">(optional — the report follows this form format)</span></span>
-        <select name="report_template_id">
-          <option value="">Built-in issue report</option>
-          <?php foreach ($templates as $t): ?>
-            <option value="<?= (int) $t['id'] ?>"><?= e($t['code']) ?> · <?= e($t['name']) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </label>
       <label class="field field--wide"><span>Description</span>
         <textarea name="description" rows="3" placeholder="What happened, evidence, immediate action taken"></textarea>
       </label>
-      <label class="field field--wide"><span>Root cause <span class="muted">(optional)</span></span>
-        <textarea name="root_cause" rows="2"></textarea>
-      </label>
     </div>
+
+    <details class="more more--inner">
+      <summary>Owner, location and report form <span class="muted">(optional)</span></summary>
+      <div class="more__body">
+        <div class="form__grid">
+          <label class="field"><span>Owner</span><input type="text" name="owner" maxlength="100" placeholder="Name"></label>
+          <label class="field"><span>Location</span><input type="text" name="location" maxlength="120" placeholder="Plant / line / room"></label>
+          <label class="field"><span>Department</span><input type="text" name="department" maxlength="100"></label>
+          <label class="field"><span>Asset / system</span><input type="text" name="asset" maxlength="140"></label>
+          <label class="field"><span>Reported by</span><input type="text" name="reported_by" maxlength="100" value="<?= e(current_user_name()) ?>"></label>
+          <label class="field"><span>Reported</span><input type="date" name="reported_at" value="<?= date('Y-m-d') ?>"></label>
+          <label class="field"><span>Due</span><input type="date" name="due_at"></label>
+          <label class="field"><span>Tags <span class="muted">(max 6)</span></span>
+            <input type="text" name="tags" maxlength="200" list="tag-suggest" placeholder="e.g. tailgating, gate">
+          </label>
+          <label class="field field--wide"><span>Report form template <span class="muted">(the report follows this form format)</span></span>
+            <select name="report_template_id">
+              <option value="">Built-in issue report</option>
+              <?php foreach ($templates as $t): ?>
+                <option value="<?= (int) $t['id'] ?>"><?= e($t['code']) ?> · <?= e($t['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label class="field field--wide"><span>Root cause</span>
+            <textarea name="root_cause" rows="2"></textarea>
+          </label>
+        </div>
+      </div>
+    </details>
     <div class="form__actions">
       <button type="submit" class="btn btn--primary">Create issue</button>
       <span class="muted">Opens the full report page so you can add evidence and suspects.</span>
@@ -154,46 +163,11 @@ $canExport = can('issue.export');
   <datalist id="tag-suggest">
     <?php foreach ($allTags as $t): ?><option value="<?= e($t) ?>" label="#<?= e($t) ?>"></option><?php endforeach; ?>
   </datalist>
+  </div>
 </details>
 <?php endif; ?>
 
-<div class="toolbar">
-  <div class="chips chips--filter">
-    <span class="chips__label">Category</span>
-    <a class="chip <?= !$cat ? 'is-on' : '' ?>" href="<?= e(issue_url(['cat' => ''])) ?>">All <b><?= (int) array_sum($catCounts) ?></b></a>
-    <?php foreach (['Physical Security', 'IT Security', 'Strain Security'] as $c): ?>
-      <a class="chip chip--<?= scope_tone($c) ?> <?= $cat === $c ? 'is-on' : '' ?>" href="<?= e(issue_url(['cat' => $cat === $c ? '' : $c])) ?>">
-        <?= e($c) ?> <b><?= (int) ($catCounts[$c] ?? 0) ?></b>
-      </a>
-    <?php endforeach; ?>
-  </div>
-
-  <div class="chips chips--filter">
-    <span class="chips__label">Severity</span>
-    <?php foreach (['Critical', 'High', 'Medium', 'Low'] as $s): ?>
-      <a class="chip <?= $sev === $s ? 'is-on' : '' ?>" href="<?= e(issue_url(['sev' => $sev === $s ? '' : $s])) ?>">
-        <?= $s ?> <b><?= (int) ($sevCounts[$s] ?? 0) ?></b>
-      </a>
-    <?php endforeach; ?>
-  </div>
-
-  <div class="chips chips--filter">
-    <span class="chips__label">Status</span>
-    <?php foreach (['Open', 'In Progress', 'Contained', 'Resolved'] as $s): ?>
-      <a class="chip chip--<?= status_tone($s) ?> <?= $stt === $s ? 'is-on' : '' ?>" href="<?= e(issue_url(['st' => $stt === $s ? '' : $s])) ?>"><?= $s ?></a>
-    <?php endforeach; ?>
-  </div>
-
-  <?php if ($allTags): ?>
-  <div class="chips chips--filter">
-    <span class="chips__label">Tags</span>
-    <?php foreach (array_slice($allTags, 0, 8) as $t): ?>
-      <?php $on = mb_strtolower($tag) === mb_strtolower($t); ?>
-      <a class="chip <?= $on ? 'is-on' : '' ?>" href="<?= e(issue_url(['tag' => $on ? '' : $t])) ?>">#<?= e($t) ?></a>
-    <?php endforeach; ?>
-  </div>
-  <?php endif; ?>
-
+<div class="toolbar toolbar--filters">
   <form class="search" method="get" action="index.php">
     <input type="hidden" name="page" value="issues">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search code, title, owner, asset…">
@@ -202,22 +176,87 @@ $canExport = can('issue.export');
       <a class="btn btn--ghost" href="?page=issues">Clear</a>
     <?php endif; ?>
   </form>
+
+  <details class="filters filters--pop">
+    <summary>Filters<?= ($cat || $sev || $stt || $tag) ? ' · on' : '' ?></summary>
+    <div class="filters__body">
+    <div class="chips chips--filter">
+      <span class="chips__label">Category</span>
+      <a class="chip <?= !$cat ? 'is-on' : '' ?>" href="<?= e(issue_url(['cat' => ''])) ?>">All <b><?= (int) array_sum($catCounts) ?></b></a>
+      <?php foreach (['Physical Security', 'IT Security', 'Strain Security'] as $c): ?>
+        <a class="chip chip--<?= scope_tone($c) ?> <?= $cat === $c ? 'is-on' : '' ?>" href="<?= e(issue_url(['cat' => $cat === $c ? '' : $c])) ?>">
+          <?= e($c) ?> <b><?= (int) ($catCounts[$c] ?? 0) ?></b>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="chips chips--filter">
+      <span class="chips__label">Severity</span>
+      <?php foreach (['Critical', 'High', 'Medium', 'Low'] as $s): ?>
+        <a class="chip <?= $sev === $s ? 'is-on' : '' ?>" href="<?= e(issue_url(['sev' => $sev === $s ? '' : $s])) ?>">
+          <?= $s ?> <b><?= (int) ($sevCounts[$s] ?? 0) ?></b>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="chips chips--filter">
+      <span class="chips__label">Status</span>
+      <?php foreach (['Open', 'In Progress', 'Contained', 'Resolved'] as $s): ?>
+        <a class="chip chip--<?= status_tone($s) ?> <?= $stt === $s ? 'is-on' : '' ?>" href="<?= e(issue_url(['st' => $stt === $s ? '' : $s])) ?>"><?= $s ?></a>
+      <?php endforeach; ?>
+    </div>
+
+    <?php if ($allTags): ?>
+    <div class="chips chips--filter">
+      <span class="chips__label">Tags</span>
+      <?php foreach (array_slice($allTags, 0, 8) as $t): ?>
+        <?php $on = mb_strtolower($tag) === mb_strtolower($t); ?>
+        <a class="chip <?= $on ? 'is-on' : '' ?>" href="<?= e(issue_url(['tag' => $on ? '' : $t])) ?>">#<?= e($t) ?></a>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    </div>
+  </details>
+
+  <span class="countchip"><?= number_format($total) ?> issue<?= $total === 1 ? '' : 's' ?> match</span>
+
+  <?php if ($canCreate): ?>
+    <a class="btn btn--primary btn--sm" href="?page=issues&amp;new=1"
+       data-modal-node="new-issue-form" data-modal-drawer data-modal-title="Report a new issue">+ Report new issue</a>
+  <?php endif; ?>
 </div>
+
+<?php if ($cat !== '' || $sev !== '' || $stt !== '' || $tag !== '' || $q !== ''): ?>
+<p class="activefilters">
+  <span class="activefilters__label">Showing</span>
+  <?php foreach ([['cat', 'Category', $cat], ['sev', 'Severity', $sev], ['st', 'Status', $stt]] as [$key, $label, $value]): ?>
+    <?php if ($value === '') continue; ?>
+    <a class="chip is-on" href="<?= e(issue_url([$key => ''])) ?>" title="Remove this filter"><?= e($label) ?>: <?= e($value) ?> <span aria-hidden="true">×</span></a>
+  <?php endforeach; ?>
+  <?php if ($tag !== ''): ?>
+    <a class="chip is-on" href="<?= e(issue_url(['tag' => ''])) ?>" title="Remove this filter">Tag: #<?= e($tag) ?> <span aria-hidden="true">×</span></a>
+  <?php endif; ?>
+  <?php if ($q !== ''): ?>
+    <a class="chip is-on" href="<?= e(issue_url(['q' => ''])) ?>" title="Clear the search">Search: <?= e($q) ?> <span aria-hidden="true">×</span></a>
+  <?php endif; ?>
+  <a class="link" href="?page=issues">Clear all</a>
+</p>
+<?php endif; ?>
 
 <section class="card card--flush">
   <table class="table table--list">
     <caption class="sr-only">Security issue register</caption>
     <thead>
       <tr>
-        <th class="num" scope="col">#</th>
+        <th class="num col-phone" scope="col">#</th>
         <th scope="col">Issue</th>
-        <th>Category</th>
+        <th class="col-secondary">Category</th>
         <th>Severity</th>
-        <th class="center">Risk</th>
+        <th class="center col-phone">Risk</th>
         <th>Status</th>
-        <th>Owner</th>
-        <th>Reported</th>
-        <th>Due</th>
+        <th class="col-secondary">Owner</th>
+        <th class="col-secondary">Reported</th>
+        <th class="col-phone">Due</th>
         <th></th>
       </tr>
     </thead>
@@ -228,7 +267,7 @@ $canExport = can('issue.export');
         $overdue = $r['due_at'] && $r['due_at'] < date('Y-m-d') && $r['status'] !== 'Resolved';
       ?>
       <tr class="row <?= $overdue ? 'row--overdue' : '' ?>">
-        <td class="num"><?= $offset + $i + 1 ?></td>
+        <td class="num col-phone"><?= $offset + $i + 1 ?></td>
         <td class="cell-issue">
           <a class="cell-issue__link" href="?page=issue&amp;id=<?= (int) $r['id'] ?>">
             <span class="mono"><?= e($r['code']) ?></span>
@@ -238,12 +277,12 @@ $canExport = can('issue.export');
             <?= e($r['location']) ?: '—' ?> · <?= e($r['department']) ?: '—' ?> · owner <?= e($r['owner']) ?: '—' ?>
           </span>
           <?php if (trim((string) $r['tags']) !== ''): ?>
-            <span class="cell-issue__tags"><?= tag_chips($r['tags'], $tag) ?></span>
+            <span class="cell-issue__tags hide-simple"><?= tag_chips($r['tags'], $tag) ?></span>
           <?php endif; ?>
         </td>
-        <td><span class="tag tag--<?= scope_tone($r['category']) ?>"><?= e($r['category']) ?></span></td>
+        <td class="col-secondary"><span class="tag tag--<?= scope_tone($r['category']) ?>"><?= e($r['category']) ?></span></td>
         <td><?= badge($r['severity'], severity_tone($r['severity'])) ?></td>
-        <td class="center"><span class="riskscore riskscore--sm riskscore--<?= risk_tone($score) ?>" title="<?= $r['likelihood'] ?> × <?= $r['impact'] ?>"><?= $score ?></span></td>
+        <td class="center col-phone"><span class="riskscore riskscore--sm riskscore--<?= risk_tone($score) ?>" title="<?= $r['likelihood'] ?> × <?= $r['impact'] ?>"><?= $score ?></span></td>
         <td>
           <?php if (can('issue.update')): ?>
             <form class="inline-form" method="post" action="index.php">
@@ -262,9 +301,9 @@ $canExport = can('issue.export');
             <?= badge($r['status'], status_tone($r['status'])) ?>
           <?php endif; ?>
         </td>
-        <td class="nowrap"><?= e($r['owner']) ?: '—' ?></td>
-        <td class="nowrap"><?= fmt_date($r['reported_at']) ?></td>
-        <td class="nowrap <?= $overdue ? 'text-red' : '' ?>"><?= fmt_date($r['due_at']) ?><?= $overdue ? ' ⚠' : '' ?></td>
+        <td class="nowrap col-secondary"><?= e($r['owner']) ?: '—' ?></td>
+        <td class="nowrap col-secondary"><?= fmt_date($r['reported_at']) ?></td>
+        <td class="nowrap col-phone <?= $overdue ? 'text-red' : '' ?>"><?= fmt_date($r['due_at']) ?><?= $overdue ? ' ⚠' : '' ?></td>
         <td class="right">
           <a class="btn btn--ghost btn--xs" href="?page=issue&amp;id=<?= (int) $r['id'] ?>">Report</a>
           <?php if (can('issue.export')): ?>

@@ -42,7 +42,7 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
 ]))) : '');
 ?>
 
-<section class="grid grid--stats">
+<section class="grid grid--stats statbar">
   <article class="card stat stat--blue">
     <p class="stat__label">Events today</p>
     <p class="stat__value"><?= number_format($stats['today']) ?></p>
@@ -65,7 +65,11 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
   </article>
 </section>
 
-<form class="card form" method="get" action="index.php">
+<div class="toolbar toolbar--filters">
+  <details class="filters filters--pop">
+    <summary>Filters<?= $narrow ? ' · on' : '' ?></summary>
+    <div class="filters__body">
+<form class="form" method="get" action="index.php">
   <input type="hidden" name="page" value="audit">
   <div class="form__grid">
     <label class="field field--wide">
@@ -101,9 +105,27 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
     <button type="submit" class="btn btn--primary">Apply filters</button>
     <?php if ($narrow): ?><a class="btn btn--ghost" href="?page=audit">Clear</a><?php endif; ?>
     <a class="btn btn--ghost" href="<?= $exportUrl ?>">Export CSV</a>
-    <span class="muted"><?= number_format($res['total']) ?> event(s) match · the trail is append-only</span>
   </div>
 </form>
+    </div>
+  </details>
+
+  <span class="countchip"><?= number_format($res['total']) ?> event(s) match · the trail is append-only</span>
+  <a class="btn btn--ghost" href="<?= $exportUrl ?>">Export CSV</a>
+</div>
+
+<?php if ($narrow): ?>
+<p class="activefilters">
+  <span class="activefilters__label">Showing</span>
+  <?php if ($f['q'] !== ''): ?><a class="chip is-on" href="<?= e(audit_url(['q' => ''])) ?>" title="Clear the search">Search: <?= e($f['q']) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($f['action'] !== ''): ?><a class="chip is-on" href="<?= e(audit_url(['action' => ''])) ?>" title="Remove this filter">Action: <?= e($acts[$f['action']][0] ?? $f['action']) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($f['entity'] !== ''): ?><a class="chip is-on" href="<?= e(audit_url(['entity' => ''])) ?>" title="Remove this filter">Record: <?= e($ents[$f['entity']] ?? $f['entity']) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($f['actor'] !== ''): ?><a class="chip is-on" href="<?= e(audit_url(['actor' => ''])) ?>" title="Remove this filter">Actor: <?= e($f['actor']) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($f['from'] !== ''): ?><a class="chip is-on" href="<?= e(audit_url(['from' => ''])) ?>" title="Remove this filter">From: <?= e($f['from']) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <?php if ($f['to'] !== ''): ?><a class="chip is-on" href="<?= e(audit_url(['to' => ''])) ?>" title="Remove this filter">To: <?= e($f['to']) ?> <span aria-hidden="true">×</span></a><?php endif; ?>
+  <a class="link" href="?page=audit">Clear all</a>
+</p>
+<?php endif; ?>
 
 <section class="card card--flush">
   <table class="table table--list">
@@ -114,8 +136,8 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
         <th scope="col">Actor</th>
         <th scope="col">Event</th>
         <th scope="col">Record</th>
-        <th scope="col">Detail</th>
-        <th scope="col">From</th>
+        <th scope="col" class="col-secondary">Detail</th>
+        <th scope="col" class="col-secondary">From</th>
       </tr>
     </thead>
     <tbody>
@@ -144,8 +166,8 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
             </span>
           <?php endif; ?>
         </td>
-        <td><?= e($r['detail']) ?: '<span class="muted">—</span>' ?></td>
-        <td class="nowrap mono muted"><?= e($r['ip']) ?: '—' ?></td>
+        <td class="col-secondary"><?= e($r['detail']) ?: '<span class="muted">—</span>' ?></td>
+        <td class="nowrap mono muted col-secondary"><?= e($r['ip']) ?: '—' ?></td>
       </tr>
     <?php endforeach; ?>
     <?php if (!$rows): ?>
@@ -172,11 +194,16 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
 </nav>
 <?php endif; ?>
 
-<p class="footnote">
-  Entries are written by the application and never edited: no screen updates or deletes them.
-  Each entry is also chained to the one before it by a SHA-256 hash — <span class="mono">php tests/verify-audit.php</span>
-  re-reads the table and names the first entry that no longer matches.
-  Coverage — sign-in, sign-out, refused actions, issues, status changes, report forms, notes, people,
-  evidence, tasks, templates, exceptions, categories, users and exports. Export the filtered view as CSV
-  for an audit pack; retention follows your database backup policy.
-</p>
+<details class="more" data-more>
+  <summary>About this trail <span class="more__hint">hash chain · coverage · retention</span></summary>
+  <div class="more__body">
+    <p class="footnote">
+      Entries are written by the application and never edited: no screen updates or deletes them.
+      Each entry is also chained to the one before it by a SHA-256 hash — <span class="mono">php tests/verify-audit.php</span>
+      re-reads the table and names the first entry that no longer matches.
+      Coverage — sign-in, sign-out, refused actions, issues, status changes, report forms, notes, people,
+      evidence, tasks, templates, exceptions, categories, users and exports. Export the filtered view as CSV
+      for an audit pack; retention follows your database backup policy.
+    </p>
+  </div>
+</details>
