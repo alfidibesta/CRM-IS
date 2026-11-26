@@ -11,6 +11,42 @@ the page you are on.
 
 ---
 
+## Quick start — enter data step by step
+
+Every register works the same way: press the **+ button**, fill the short form,
+press **Save**. The record then opens (or sits in the list) so you can add the
+detail. Nothing typed into a form is lost — an error redraws it filled in — and
+every save is written to the audit trail.
+
+1. **Sign in** with the account you were issued.
+2. **Report a finding** — *Issues* → **+ Report new issue** → title, category,
+   severity, likelihood, impact, description → **Create issue**. The report page
+   that opens takes evidence, persons involved, notes and remediation tasks.
+3. **Plan the work** — *Workflow* → **+ Add task** → task, column, priority,
+   owner, due date, optional linked issue → **Add task**. Drag the card between
+   columns to move it.
+4. **Add a controlled document** — *SOP & Policy* → **+ New document** → title,
+   type, scope, version, owner, status, effective and review dates, controlled
+   text → **Create document**.
+5. **Add a form** — *Templates* → **+ New template** → code, name, category,
+   source with `{{PLACEHOLDER}}` fields → **Create template**.
+6. **Record a deviation** — *EDLP Exceptions* → **+ Add EDLP exception** →
+   title, category, risk, target, period, justification, compensating control →
+   **Add exception**. Extend it with **Edit → Renew**; record the control check
+   with **Edit → Verify**.
+7. **Record an OT finding** — *OT Vulnerabilities* → **Vulnerability
+   registration** → location, vulnerability, importance, target facilities →
+   **Monitoring and management** for status, due date, owner, CVSS and control →
+   **Vulnerability registration**.
+8. **Add an account** (administrator) — *Users & Authority* → **+ Add user** →
+   username, name, e-mail, role, password (8+ characters) → **Create account**.
+9. **Prove it** — *Audit trail* lists every save; **Export CSV** for the
+   auditor.
+
+Each section below covers one screen in full.
+
+---
+
 ## 1. Signing in
 
 Open the site URL; you land on the sign-in screen.
@@ -80,10 +116,12 @@ The page is read-only.
 
 Every finding, newest first.
 
-- **Report a new issue** (with `issue.create`): title, category, severity, owner,
-  location, department, asset, dates, tags, description and the first risk
-  assessment. The risk score is **likelihood × impact** (1–5 each), so it runs
-  from 1 to 25.
+- **Report a new issue** — *Issues* → **+ Report new issue** (needs
+  `issue.create`): title, category, severity, the likelihood/impact pair and a
+  description are the required part; owner, location, department, asset, dates
+  and tags sit under the optional section. The risk score is
+  **likelihood × impact** (1–5 each), so it runs from 1 to 25. The press of
+  **Create issue** opens the full report page.
 - **Find** by code, title, owner or asset with the search box, or narrow with the
   category/tag chips, severity, status and owner filters. Filters stay in the
   URL, so a view can be bookmarked.

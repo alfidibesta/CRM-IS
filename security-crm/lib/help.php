@@ -23,7 +23,7 @@ function help_topics(): array
                 'Click a category in "Issues by category" to open the register already filtered to it.',
                 'Use the bell for new alerts and "Recently reported" for the latest findings.',
             ],
-            'tip' => 'This page is read-only; every record is one click away in the sidebar.',
+            'tip' => 'This page is read-only. To enter data, go to Issues and press "+ Report new issue".',
         ],
 
         'issues' => [
@@ -136,7 +136,7 @@ function help_topics(): array
             'title'   => 'Users & authority',
             'summary' => 'Accounts, roles and the authority matrix that decides what each role may do.',
             'steps'   => [
-                'Create an account with a unique username and a password of at least 8 characters.',
+                'Press "+ Add user" at the bottom of the page: a unique username, a password of at least 8 characters and a role.',
                 'Edit an account to change its name, e-mail, role or active state, or to reset its password.',
                 'Read the authority matrix to see exactly which permission each role holds.',
             ],

@@ -223,35 +223,81 @@ SetEnv SECOPS_FRAME_ANCESTORS "https://intranet.example.local"
 
 ## How to use it
 
-**Report an issue.** *Issues* -> **New issue**: title, category, severity and the
-likelihood/impact pair; the risk score and rating are derived. Save, and the full
-report opens.
+Every register works the same way: a **+ button** opens a short form, **Save**
+adds the record, and the detail (evidence, people, tasks) is added on the record
+itself. Nothing typed into a form is lost — a validation error redraws it filled
+in, and every save lands in the audit trail.
 
-**Investigate.** On the issue page, edit the fields, change status, add notes,
-add persons involved (primary, witness, victim...), upload evidence (photos,
-logs, statements) and create follow-up tasks.
+### 1. Sign in
 
-**Produce the Word report.** Pick a *Report form* template on the issue. The
-layout is pre-filled from that form and can be adjusted for this report only;
-**Download .docx** fills it with the issue's own data and appends risk, persons,
-evidence, tasks, activity and sign-off as annexes.
+1. Open the URL, enter the username and password, press **Sign in**.
+2. The dashboard that opens is read-only: it counts what the registers hold.
 
-**Track deviations.** *EDLP Exceptions* -> add the target, period, justification
-and compensating control. The state follows the dates; categories can be added,
-renamed (records follow), restyled or deleted when unused.
+### 2. Report a security issue
 
-**Track OT findings.** *OT Vulnerabilities* -> add the site, asset, category,
-severity and CVSS score, the control in force, the recommendation, how the PC
-risk is managed and the remediation due date. The state follows the status and
-the due date; the category, state and site filters narrow the list.
+1. Sidebar -> **Issues** -> **+ Report new issue**.
+2. Fill **Title**, **Category**, **Severity**, **Likelihood**, **Impact** and
+   **Description**. The risk score (likelihood x impact) is calculated for you.
+3. Open **Owner, location and report form** if you have the owner, location,
+   department, asset, reported/due dates, tags or the Word form to choose.
+4. Press **Create issue** — the full report page opens on the new record.
+5. On that page: **Upload evidence**, **+ Add person**, **+ Add note**, and add
+   remediation tasks. **Download report (.docx)** writes the Word report.
 
-**Keep documents current.** *SOP & Policy* lists every controlled document with
-version, status and review date; dashboard stats and alerts flag reviews that
-are due.
+### 3. Add a workflow task
 
-**Review and prove it.** *Audit trail* filters by action, record type, actor,
-free text and date and exports the current view as CSV. *Users & Authority*
-shows the role matrix and manages accounts.
+1. **Workflow** -> **+ Add task**: task, column, priority, category, owner, due
+   date and an optional linked issue.
+2. Press **Add task**; drag the card to another column to move it — the move is
+   saved and audited on drop.
+
+### 4. Add a controlled document (policy / SOP / guideline)
+
+1. **SOP & Policy** -> **+ New document**.
+2. Title (the code is optional — leaving it blank assigns one), type, scope,
+   version, owner, status, effective and next review dates, summary.
+3. Paste the controlled text in light Markdown: `# heading`, `- bullet`,
+   `1. numbered`, `| table |`.
+4. Press **Create document**. Readers later record **I have read vX** on the row.
+
+### 5. Add a form template
+
+1. **Templates** -> **+ New template**: code, name, category and the form source
+   with `{{PLACEHOLDER}}` fields.
+2. Press **Create template**, then **Preview & fill** to fill a copy or
+   **Download .docx** for Word.
+
+### 6. Add an EDLP exception
+
+1. **EDLP Exceptions** -> **+ Add EDLP exception**.
+2. Title, category, risk level, target, period start/end, owner, approved by,
+   detail, business justification and compensating control.
+3. Press **Add exception**. A period end inside 30 days reads **Expiring**, a
+   past one **Expired**.
+4. Extend it with **Edit -> Renew** (new end date, reason, approver) and record
+   the control check with **Edit -> Verify**.
+
+### 7. Add an OT vulnerability
+
+1. **OT Vulnerabilities** -> open **Vulnerability registration**.
+2. Fill business location, vulnerability, importance and target facilities.
+3. Open **Monitoring and management** for status, remediation due date, PC risk
+   management, recent contact, owner, CVSS score, control and recommendation.
+4. Press **Vulnerability registration** at the bottom of the form.
+
+### 8. Add a user (administrator only)
+
+1. **Users & Authority** -> **+ Add user**: username, name, e-mail, role and a
+   password of at least 8 characters.
+2. Press **Create account**. **Save** on a row changes the role, disables the
+   account or resets its password.
+
+### 9. Check the trail
+
+1. **Audit trail** lists every save with who, when and from where; **Export CSV**
+   downloads the current filter.
+2. The **Alerts** bell holds assignments, critical findings, items falling due
+   and exceptions about to expire.
 
 ### Upgrading from an earlier build
 
@@ -445,8 +491,10 @@ panel for the page you are on — what the screen is for, the steps for its
 actions and one tip — so nobody has to leave the record they are looking at.
 The entries live in `lib/help.php`, one per page.
 
-The full manual is [help.md](help.md): sign-in and roles, every register, the
-Word exports, data conventions and troubleshooting.
+The full manual is [help.md](help.md). It opens with a step-by-step quick start
+for entering data — issues, tasks, documents, forms, deviations, OT findings and
+accounts — then covers sign-in and roles, every register, the Word exports, data
+conventions and troubleshooting.
 
 ## Offline
 
