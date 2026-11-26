@@ -1598,6 +1598,9 @@ html.js .modal__body .modal-source,
 html.js .panel--create[open] .modal-source { display: block; }
 
 .modal--drawer { justify-content: flex-end; padding: 0; }
+/* Workflow's create form is a board popover on the page; in the drawer it is
+   ordinary content, so it must not stay absolutely positioned below the panel. */
+.modal--drawer .modal__body .form--inline { position: static; width: auto; box-shadow: none; }
 /* The create form keeps its .card chrome for the inline no-JS fallback only;
    inside the drawer the panel already provides the surface. */
 .modal--drawer .modal__body .card { border: 0; border-radius: 0; box-shadow: none; padding: 0; margin: 0; background: transparent; }
@@ -1613,7 +1616,7 @@ html.js .panel--create[open] .modal-source { display: block; }
 @keyframes drawer-in { from { opacity: 0; transform: translateX(24px); } }
 .modal--drawer .form__actions {
   position: sticky;
-  bottom: -14px;
+  bottom: 0;
   padding: 10px 0 6px;
   background: var(--card);
   border-top: 1px solid var(--line-2);
