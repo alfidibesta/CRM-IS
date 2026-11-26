@@ -707,94 +707,101 @@ function seed_issues(PDO $pdo): void
     $defaults = [
         'department' => '', 'asset' => '', 'reported_by' => '', 'likelihood' => 3, 'impact' => 3,
         'root_cause' => null, 'immediate_action' => null, 'corrective_action' => null,
-        'reviewed_by' => '', 'reviewed_at' => null, 'approved_by' => '',
+        'reviewed_by' => '', 'reviewed_at' => null, 'approved_by' => '', 'closed_at' => null,
     ];
 
+    /* Demo dates ride along with the day the database is first built, the way
+       the exception and OT seeds already do: the six-month trend, the overdue
+       count and the age buckets stay meaningful however long this build sits
+       before someone runs it. */
+    $ago   = fn(int $days): string => date('Y-m-d', strtotime("-{$days} days"));
+    $ahead = fn(int $days): string => date('Y-m-d', strtotime("+{$days} days"));
+
     $rows = [
-        ['code'=>'SEC-1001','title'=>'Unlocked server room door after shift change','category'=>'Physical Security','severity'=>'Critical','status'=>'Open','owner'=>'S. Wijaya','location'=>'HQ - Server Room','reported_at'=>'2025-10-02','due_at'=>'2025-11-05',
+        ['code'=>'SEC-1001','title'=>'Unlocked server room door after shift change','category'=>'Physical Security','severity'=>'Critical','status'=>'Open','owner'=>'S. Wijaya','location'=>'HQ - Server Room','reported_at'=>$ago(6),'due_at'=>$ahead(9),
          'description'=>"Door contact sensor reported open for 40 minutes; badge log shows no guard round.\nObserved during the 22:00 round: server room door ajar, no person inside, alarm panel in bypass since 21:10.",
          'department'=>'IT Infrastructure','asset'=>'SR-A1 door controller / alarm panel','reported_by'=>'Night Security Patrol','likelihood'=>4,'impact'=>5,
          'root_cause'=>'Alarm panel left in bypass during cabling work and the work order was closed without restoring it.',
          'immediate_action'=>'Door secured, bypass removed, panel returned to normal, guard round re-issued.',
          'corrective_action'=>'Add bypass-restore step to the work order checklist; audit panel state at every round.','reviewed_by'=>'R. Hartono'],
 
-        ['code'=>'SEC-1002','title'=>'Tailgating at east gate captured on camera','category'=>'Physical Security','severity'=>'High','status'=>'In Progress','owner'=>'S. Wijaya','location'=>'Plant - East Gate','reported_at'=>'2025-10-06','due_at'=>'2025-11-12',
+        ['code'=>'SEC-1002','title'=>'Tailgating at east gate captured on camera','category'=>'Physical Security','severity'=>'High','status'=>'In Progress','owner'=>'S. Wijaya','location'=>'Plant - East Gate','reported_at'=>$ago(19),'due_at'=>$ahead(4),
          'description'=>"Two visitors entered without badge registration during the 14:00 shift handover.\nCamera 14 shows both persons following a forklift through the gate within the 8-second closing window.",
          'department'=>'Logistics','asset'=>'East gate turnstile / camera 14','reported_by'=>'Gate Operator','likelihood'=>4,'impact'=>4,
          'root_cause'=>'Turnstile configured for one badge per swipe with no tailgating alarm; gate left open for forklift traffic.',
          'immediate_action'=>'Both persons identified and registered retrospectively; gate discipline re-briefed.',
          'corrective_action'=>'Enable tailgating detection on camera 14 and split the forklift lane.','reviewed_by'=>'R. Hartono'],
 
-        ['code'=>'SEC-1003','title'=>'Faded access signage at chemical warehouse','category'=>'Physical Security','severity'=>'Low','status'=>'Contained','owner'=>'B. Saputra','location'=>'Warehouse B','reported_at'=>'2025-09-18','due_at'=>'2025-11-30',
+        ['code'=>'SEC-1003','title'=>'Faded access signage at chemical warehouse','category'=>'Physical Security','severity'=>'Low','status'=>'Contained','owner'=>'B. Saputra','location'=>'Warehouse B','reported_at'=>$ago(47),'due_at'=>$ahead(12),
          'description'=>'Restricted-area signage no longer legible; replacement ordered.',
          'department'=>'Warehouse','asset'=>'Warehouse B entrance signage','reported_by'=>'EHS Officer','likelihood'=>2,'impact'=>2,
          'immediate_action'=>'Temporary printed sign posted; area temporarily restricted to badge holders.'],
 
-        ['code'=>'SEC-1004','title'=>'Legacy HMI reachable from office VLAN','category'=>'IT Security','severity'=>'Critical','status'=>'In Progress','owner'=>'D. Kusuma','location'=>'Plant - Line 3','reported_at'=>'2025-10-08','due_at'=>'2025-11-08',
+        ['code'=>'SEC-1004','title'=>'Legacy HMI reachable from office VLAN','category'=>'IT Security','severity'=>'Critical','status'=>'In Progress','owner'=>'D. Kusuma','location'=>'Plant - Line 3','reported_at'=>$ago(128),'due_at'=>$ago(12),
          'description'=>"Engineering HMI accepts logins from the corporate network; segmentation change requested.\nPort scan from the office VLAN confirms RDP and VNC open on 10.20.4.31.",
          'department'=>'Automation','asset'=>'HMI-03 (10.20.4.31)','reported_by'=>'D. Kusuma','likelihood'=>4,'impact'=>5,
          'root_cause'=>'Temporary rule added during an equipment trial in 2023 was never removed.',
          'immediate_action'=>'Rule restricted to the engineering jump host; monitoring enabled on the HMI.',
          'corrective_action'=>'Firewall rule review for all OT assets with automatic expiry on temporary rules.','reviewed_by'=>'R. Hartono'],
 
-        ['code'=>'SEC-1005','title'=>'Shared operator account on MES terminal 4','category'=>'IT Security','severity'=>'High','status'=>'Open','owner'=>'D. Kusuma','location'=>'MES - Line 4','reported_at'=>'2025-10-11','due_at'=>'2025-11-15',
+        ['code'=>'SEC-1005','title'=>'Shared operator account on MES terminal 4','category'=>'IT Security','severity'=>'High','status'=>'Open','owner'=>'D. Kusuma','location'=>'MES - Line 4','reported_at'=>$ago(158),'due_at'=>$ago(3),
          'description'=>"Single credential used by three operators; audit trail unusable.",
          'department'=>'Production Line 4','asset'=>'MES terminal 4','reported_by'=>'MES Administrator','likelihood'=>3,'impact'=>4,
          'root_cause'=>'Account created as a fallback during a badge reader outage and never replaced.',
          'corrective_action'=>'Issue individual operator accounts; enforce badge logon on all MES terminals.'],
 
-        ['code'=>'SEC-1006','title'=>'Outdated antivirus definitions on 12 workstations','category'=>'IT Security','severity'=>'Medium','status'=>'Contained','owner'=>'A. Pratama','location'=>'Plant - IT','reported_at'=>'2025-09-28','due_at'=>'2025-11-20',
+        ['code'=>'SEC-1006','title'=>'Outdated antivirus definitions on 12 workstations','category'=>'IT Security','severity'=>'Medium','status'=>'Contained','owner'=>'A. Pratama','location'=>'Plant - IT','reported_at'=>$ago(96),'due_at'=>$ahead(6),
          'description'=>"Definition updates stalled after the WSUS server migration.",
          'department'=>'IT Operations','asset'=>'WSUS / 12 engineering workstations','reported_by'=>'A. Pratama','likelihood'=>3,'impact'=>3,
          'immediate_action'=>'Workstations pushed to manual update; definitions current again.',
          'corrective_action'=>'Add definition age to the weekly health report.'],
 
-        ['code'=>'SEC-1007','title'=>'Phishing email opened by procurement mailbox','category'=>'IT Security','severity'=>'High','status'=>'Resolved','owner'=>'A. Pratama','location'=>'HQ - Finance','reported_at'=>'2025-09-22','due_at'=>'2025-10-06',
+        ['code'=>'SEC-1007','title'=>'Phishing email opened by procurement mailbox','category'=>'IT Security','severity'=>'High','status'=>'Resolved','owner'=>'A. Pratama','location'=>'HQ - Finance','reported_at'=>$ago(120),'due_at'=>$ago(105),'closed_at'=>$ago(110),
          'description'=>"Credential harvested then reset; session revoked and mailbox rules purged.",
          'department'=>'Procurement','asset'=>'procurement@ mailbox','reported_by'=>'A. Pratama','likelihood'=>4,'impact'=>4,
          'root_cause'=>'Look-alike supplier domain with an invoice attachment; no banner on external mail.',
          'immediate_action'=>'Password reset, sessions revoked, malicious rules deleted, domain blocked.',
-         'corrective_action'=>'External mail banner, supplier domain allow-list, targeted phishing drill.','reviewed_by'=>'R. Hartono','reviewed_at'=>'2025-10-08'],
+         'corrective_action'=>'External mail banner, supplier domain allow-list, targeted phishing drill.','reviewed_by'=>'R. Hartono','reviewed_at'=>$ago(108)],
 
-        ['code'=>'SEC-1008','title'=>'Night shift exceeds 12 consecutive hours on control desk','category'=>'Strain Security','severity'=>'High','status'=>'Open','owner'=>'M. Larasati','location'=>'Plant - Control Room','reported_at'=>'2025-10-09','due_at'=>'2025-11-10',
+        ['code'=>'SEC-1008','title'=>'Night shift exceeds 12 consecutive hours on control desk','category'=>'Strain Security','severity'=>'High','status'=>'Open','owner'=>'M. Larasati','location'=>'Plant - Control Room','reported_at'=>$ago(33),'due_at'=>$ahead(6),
          'description'=>"Fatigue-related lapses correlate with two badge-tailgating incidents.\nRoster review shows three operators above 60 hours in the last seven days.",
          'department'=>'Production Control','asset'=>'Control desk roster','reported_by'=>'Shift Supervisor','likelihood'=>4,'impact'=>4,
          'root_cause'=>'Understaffed night roster during the ramp-up to the Q4 order.',
          'corrective_action'=>'Re-balance the roster, add one relief operator, block overtime above policy in the scheduling tool.'],
 
-        ['code'=>'SEC-1009','title'=>'No refresher training for 9 new operators','category'=>'Strain Security','severity'=>'Medium','status'=>'In Progress','owner'=>'M. Larasati','location'=>'HR / Training','reported_at'=>'2025-10-01','due_at'=>'2025-11-25',
+        ['code'=>'SEC-1009','title'=>'No refresher training for 9 new operators','category'=>'Strain Security','severity'=>'Medium','status'=>'In Progress','owner'=>'M. Larasati','location'=>'HR / Training','reported_at'=>$ago(74),'due_at'=>$ahead(2),
          'description'=>"Onboarding batch missed the quarterly security awareness session.",
          'department'=>'HR / Training','asset'=>'Training matrix','reported_by'=>'HR Officer','likelihood'=>3,'impact'=>3,
          'corrective_action'=>'Run a make-up session and gate system access on training completion.'],
 
-        ['code'=>'SEC-1010','title'=>'Pressure to bypass change approval on SCADA','category'=>'Strain Security','severity'=>'Critical','status'=>'Open','owner'=>'R. Hartono','location'=>'Plant - SCADA','reported_at'=>'2025-10-13','due_at'=>'2025-11-03',
+        ['code'=>'SEC-1010','title'=>'Pressure to bypass change approval on SCADA','category'=>'Strain Security','severity'=>'Critical','status'=>'Open','owner'=>'R. Hartono','location'=>'Plant - SCADA','reported_at'=>$ago(11),'due_at'=>$ahead(14),
          'description'=>"Production deadline used to justify an undocumented configuration change.\nChange was applied directly on the SCADA server without a ticket or rollback plan.",
          'department'=>'Automation','asset'=>'SCADA server / project archive','reported_by'=>'Automation Engineer','likelihood'=>3,'impact'=>5,
          'root_cause'=>'Deadline pressure plus unclear emergency-change authority.',
          'immediate_action'=>'Change documented retroactively and validated against the archive; no further edits allowed without ticket.',
          'corrective_action'=>'Define emergency change authority, require dual approval and a next-day review.','reviewed_by'=>'R. Hartono'],
 
-        ['code'=>'SEC-1011','title'=>'Fire door propped open for forklift traffic','category'=>'Physical Security','severity'=>'Medium','status'=>'Resolved','owner'=>'B. Saputra','location'=>'Warehouse A','reported_at'=>'2025-09-12','due_at'=>'2025-09-26',
+        ['code'=>'SEC-1011','title'=>'Fire door propped open for forklift traffic','category'=>'Physical Security','severity'=>'Medium','status'=>'Resolved','owner'=>'B. Saputra','location'=>'Warehouse A','reported_at'=>$ago(64),'due_at'=>$ago(50),'closed_at'=>$ago(55),
          'description'=>"Magnetic hold-open now tied to the alarm panel.",
          'department'=>'Warehouse','asset'=>'Fire door FD-12','reported_by'=>'EHS Officer','likelihood'=>3,'impact'=>4,
          'immediate_action'=>'Door released and re-closed; temporary barrier removed.',
-         'corrective_action'=>'Hold-open device wired to the panel; daily visual check added to the opening round.','reviewed_by'=>'R. Hartono','reviewed_at'=>'2025-09-28'],
+         'corrective_action'=>'Hold-open device wired to the panel; daily visual check added to the opening round.','reviewed_by'=>'R. Hartono','reviewed_at'=>$ago(52)],
 
-        ['code'=>'SEC-1012','title'=>'Shadow IT SaaS used for supplier drawings','category'=>'IT Security','severity'=>'Medium','status'=>'Open','owner'=>'A. Pratama','location'=>'HQ - Engineering','reported_at'=>'2025-10-15','due_at'=>'2025-11-28',
+        ['code'=>'SEC-1012','title'=>'Shadow IT SaaS used for supplier drawings','category'=>'IT Security','severity'=>'Medium','status'=>'Open','owner'=>'A. Pratama','location'=>'HQ - Engineering','reported_at'=>$ago(25),'due_at'=>$ahead(1),
          'description'=>"CAD files uploaded to an unapproved file-sharing service.",
          'department'=>'Engineering','asset'=>'External file-sharing tenancy','reported_by'=>'A. Pratama','likelihood'=>3,'impact'=>4,
          'root_cause'=>'No approved external collaboration tool, so teams self-served.',
          'corrective_action'=>'Roll out an approved sharing service, revoke the tenancy, add SaaS discovery to monthly review.'],
     ];
 
-    $st = $pdo->prepare('INSERT INTO issues (code,title,category,severity,status,owner,location,department,asset,reported_by,reported_at,due_at,likelihood,impact,risk_score,root_cause,immediate_action,corrective_action,reviewed_by,reviewed_at,description)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+    $st = $pdo->prepare('INSERT INTO issues (code,title,category,severity,status,owner,location,department,asset,reported_by,reported_at,due_at,closed_at,likelihood,impact,risk_score,root_cause,immediate_action,corrective_action,reviewed_by,reviewed_at,description)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
     foreach ($rows as $row) {
         $r = array_merge($defaults, $row);
         $st->execute([
             $r['code'], $r['title'], $r['category'], $r['severity'], $r['status'], $r['owner'],
             $r['location'], $r['department'], $r['asset'], $r['reported_by'],
-            $r['reported_at'], $r['due_at'],
+            $r['reported_at'], $r['due_at'], $r['closed_at'],
             (int) $r['likelihood'], (int) $r['impact'], (int) $r['likelihood'] * (int) $r['impact'],
             $r['root_cause'], $r['immediate_action'], $r['corrective_action'],
             $r['reviewed_by'], $r['reviewed_at'], $r['description'],
