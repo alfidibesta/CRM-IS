@@ -347,6 +347,34 @@ function audit_verify(PDO $pdo, int $limit = 0): array
             'head' => $head, 'newest' => $newest, 'tail' => $prev];
 }
 
+/**
+ * Verify only the newest entries, for a screen that must stay fast as the
+ * trail grows.
+ *
+ * The entry before the window is read first, so the oldest entry in the window
+ * is still judged against its real predecessor. A clean result therefore means
+ * "these entries are intact", not "the whole trail is": the caller reports the
+ * scope it actually covered with audit_chain_scope().
+ *
+ * @return array{ok: bool, checked: int, broken: ?array, head: ?int, newest: ?int, tail: string}
+ */
+function audit_verify_tail(PDO $pdo, int $limit = 500): array
+{
+    $limit = max(1, $limit);
+    $rows  = array_reverse($pdo->query('SELECT * FROM audit_log ORDER BY id DESC LIMIT ' . $limit)->fetchAll());
+    if (!$rows) {
+        return ['ok' => true, 'checked' => 0, 'broken' => null, 'head' => null, 'newest' => null, 'tail' => ''];
+    }
+
+    $before = $pdo->prepare('SELECT row_hash FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT 1');
+    $before->execute([(int) $rows[0]['id']]);
+    $prev = $before->fetchColumn();
+    $last = end($rows);
+
+    return audit_chain_check($rows, is_string($prev) ? $prev : '')
+        + ['newest' => (int) ($last['id'] ?? 0)];
+}
+
 /* ------------------------------------------------------- external anchors */
 
 /**
@@ -459,6 +487,118 @@ function audit_anchor_check(PDO $pdo, ?array $anchor = null): array
     }
 
     return audit_anchor_verdict($anchor, $stored, $newest) + ['anchor' => $anchor];
+}
+
+/* ---------------------------------------------------------- shared wording */
+
+/**
+ * Why one entry broke the chain, in one sentence.
+ *
+ * The console verifier, the trail page and the self-check all print this, so
+ * the explanation of a break cannot drift apart between them.
+ */
+function audit_broken_reason(?string $reason): string
+{
+    return [
+        'missing' => 'carries no hash — it was written outside the application',
+        'link'    => 'no longer links to the entry before it',
+        'content' => 'no longer matches the hash recorded for it',
+    ][$reason ?? ''] ?? 'is in an unexpected state';
+}
+
+/** Why the anchored entry no longer matches the database. */
+function audit_anchor_reason(?string $reason): string
+{
+    return [
+        'deleted'   => 'the entry recorded at the anchor is gone — the newest entries were deleted, or the database was restored from an older copy',
+        'rewritten' => 'the entry recorded at the anchor no longer has the hash written outside the database',
+        'truncated' => 'the trail is shorter than the last anchor',
+    ][$reason ?? ''] ?? 'unexpected anchor state';
+}
+
+/**
+ * What a chain walk found: a short label for a badge or a row value, and one
+ * sentence saying what it means.
+ *
+ * @param array $res an audit_verify() or audit_verify_tail() result
+ * @return array{state: string, label: string, detail: string}  state: empty | ok | broken
+ */
+function audit_chain_state(array $res): array
+{
+    $checked = (int) ($res['checked'] ?? 0);
+
+    if ($checked === 0) {
+        return ['state' => 'empty', 'label' => 'empty — nothing recorded yet',
+                'detail' => 'the chain starts with the first recorded action'];
+    }
+    if (!empty($res['ok'])) {
+        return ['state' => 'ok', 'label' => 'chain intact',
+                'detail' => 'every hash matches its stored row and each entry links to the one before it'];
+    }
+
+    $id = (int) ($res['broken']['id'] ?? 0);
+
+    return ['state' => 'broken', 'label' => 'first broken link at #' . $id,
+            'detail' => 'entry #' . $id . ' ' . audit_broken_reason($res['broken']['reason'] ?? null)
+                        . ' — export the trail and keep the anchor file before changing anything'];
+}
+
+/**
+ * Which entries a walk covered, e.g. "all 134 entries (ids 1–134)", "the
+ * newest 500 of 12,431 entries (ids 11,932–12,431)", or — after a break —
+ * "checked 100 of 143 entries (ids 1–100, newest 144)".
+ *
+ * $total is the number of rows in audit_log; the number checked is used when
+ * the walk was the whole trail.
+ */
+function audit_chain_scope(array $res, int $total): string
+{
+    $checked = (int) ($res['checked'] ?? 0);
+    if ($checked === 0) {
+        return 'nothing recorded yet';
+    }
+
+    $head   = number_format((int) ($res['head'] ?? 0));
+    $newest = number_format((int) ($res['newest'] ?? 0));
+
+    // A broken walk still reads to the end, so the useful numbers are how much
+    // it read and where the trail currently ends, not a range up to the break.
+    if (!empty($res['broken'])) {
+        return number_format($checked) . ' entries read, newest id ' . $newest;
+    }
+
+    $ids = ' (ids ' . $head . '–' . $newest . ')';
+
+    return $total <= $checked
+        ? 'all ' . number_format($checked) . ' entries' . $ids
+        : 'the newest ' . number_format($checked) . ' of ' . number_format($total) . ' entries' . $ids;
+}
+
+/**
+ * What the newest anchor line says about the trail.
+ *
+ * @param array $check an audit_anchor_check() result
+ * @return array{state: string, label: string, detail: string}  state: none | ok | broken
+ */
+function audit_anchor_state(array $check): array
+{
+    switch ((string) ($check['reason'] ?? 'none')) {
+        case 'none':
+            return ['state' => 'none', 'label' => 'none recorded yet',
+                    'detail' => 'nothing follows the newest entries, so their deletion cannot be ruled out'
+                                . ' — run php tests/verify-audit.php once on the server'];
+
+        case 'ok':
+            $at = strtotime((string) ($check['anchor']['at'] ?? ''));
+
+            return ['state' => 'ok',
+                    'label' => 'matches entry #' . (int) $check['id'] . ($at ? ' · ' . date('d M Y H:i', $at) : ''),
+                    'detail' => 'the newest entries are still the ones recorded outside the database'];
+
+        default:
+            return ['state' => 'broken', 'label' => 'BROKEN at entry #' . (int) ($check['id'] ?? 0),
+                    'detail' => audit_anchor_reason($check['reason'] ?? null)];
+    }
 }
 
 /**

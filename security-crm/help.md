@@ -105,8 +105,10 @@ The posture snapshot:
   and Strain security, and across Open / In progress / Contained / Resolved.
 - **Risk ratings** — the likelihood × impact heat for unresolved issues.
 - **Latest activity**, **Recently reported**, **Audit trail**,
-  **EDLP exceptions expiring**, **Next document reviews**, **Form templates** —
-  the newest items in each area, each linking to its record.
+  **EDLP exceptions expiring**, **Document reviews**, **Form templates** —
+  the newest items in each area, each linking to its record. **Document reviews**
+  opens by itself when a document is already past its review date, oldest first,
+  with how many days late, and lists the dates still ahead below that.
 
 The page is read-only.
 

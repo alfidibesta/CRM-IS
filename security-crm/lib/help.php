@@ -139,6 +139,7 @@ function help_topics(): array
             'steps'   => [
                 'Read the verdict first: red means a check failed, orange means something needs attention soon.',
                 'A broken chain or anchor means somebody changed the trail outside the application — export the trail and keep the anchor file before anything else.',
+                'The chain row re-walks the newest 500 entries on every visit and says which entries it covered; press "Walk the whole chain" when the whole trail has to be checked.',
                 'Under "Backups", an old or missing dump means the restore drill cannot pass: run php tools/backup.php on the server.',
                 'Paths, versions and the demo-account setting are here because this page is administrator-only.',
             ],

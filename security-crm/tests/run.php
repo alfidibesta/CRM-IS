@@ -217,6 +217,37 @@ ck('anchor reports its file', $lastAnchor['file'], $anchorFile);
 @unlink($anchorFile);
 ck('anchor missing file is null', audit_anchor_last($anchorFile), null);
 
+/* ------------------------------------------ shared chain / anchor wording */
+ck('chain state: intact', audit_chain_state($whole)['state'], 'ok');
+ck('chain state: empty', audit_chain_state(['ok' => true, 'checked' => 0])['state'], 'empty');
+ck('chain state: broken names the entry',
+    audit_chain_state(audit_chain_check($tampered))['label'], 'first broken link at #2');
+ck('break reason: link', audit_broken_reason('link'), 'no longer links to the entry before it');
+ck('break reason: unknown', audit_broken_reason('nope'), 'is in an unexpected state');
+ck('anchor state: intact', audit_anchor_state($whole + ['reason' => 'ok', 'id' => 3, 'anchor' => $anchor])['state'], 'ok');
+ck('anchor state: none', audit_anchor_state(['reason' => 'none'])['state'], 'none');
+ck('anchor state: broken names the entry',
+    audit_anchor_state(['ok' => false, 'reason' => 'deleted', 'id' => 3])['label'], 'BROKEN at entry #3');
+ck('anchor reason: truncated', audit_anchor_reason('truncated'), 'the trail is shorter than the last anchor');
+ck('chain scope: whole trail', audit_chain_scope(['checked' => 3, 'head' => 1, 'newest' => 3], 3),
+    'all 3 entries (ids 1–3)');
+ck('chain scope: newest only', audit_chain_scope(['checked' => 2, 'head' => 2, 'newest' => 3], 9),
+    'the newest 2 of 9 entries (ids 2–3)');
+ck('chain scope: nothing yet', audit_chain_scope(['checked' => 0], 0), 'nothing recorded yet');
+ck('chain scope: a broken walk says how much it read',
+    audit_chain_scope(['ok' => false, 'checked' => 4, 'head' => 1, 'newest' => 5,
+                       'broken' => ['id' => 2, 'reason' => 'content']], 4),
+    '4 entries read, newest id 5');
+
+// The sentences a break or an anchor produces live in lib/audit.php only; a
+// view or the verifier that restates them drifts the first time one changes.
+$readerSrc = (string) file_get_contents(__DIR__ . '/verify-audit.php')
+    . (string) file_get_contents(__DIR__ . '/../views/audit.php')
+    . (string) file_get_contents(__DIR__ . '/../views/health.php');
+ck('one copy of the break reasons', substr_count($readerSrc, 'no longer links to the entry before it'), 0);
+ck('one copy of the anchor reasons', substr_count($readerSrc, 'the trail is shorter than'), 0);
+ck('the self-check bounds its walk', str_contains($readerSrc, 'audit_verify_tail'), true);
+
 /* --------------------------------------------------------- notifications */
 ck('kind label', notification_label('issue_assigned'), 'Assigned to you');
 ck('kind tone', notification_tone('issue_critical'), 'red');

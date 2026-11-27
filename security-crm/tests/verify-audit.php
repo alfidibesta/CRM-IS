@@ -18,6 +18,9 @@ declare(strict_types=1);
  * entry that an earlier run anchored fails the check. --no-anchor verifies
  * without advancing the file (a read-only audit).
  *
+ * The wording of a break lives in lib/audit.php, shared with the trail page and
+ * the self-check, so all three describe the same finding the same way.
+ *
  * Exit code 0 = chain intact (or the trail is empty), 1 = broken or unreadable.
  * Run it from the security-crm folder, or from anywhere: paths are relative to
  * this file. README.md covers the interpretation and its limits.
@@ -46,35 +49,27 @@ try {
     exit(1);
 }
 
-if ($res['checked'] === 0) {
-    echo 'audit trail: empty — nothing to verify' . PHP_EOL;
+$state = audit_chain_state($res);
+
+if ($state['state'] === 'empty') {
+    echo 'audit trail: ' . $state['label'] . PHP_EOL;
     exit(0);
 }
 
-if ($res['ok']) {
-    echo 'audit trail: ' . $res['checked'] . ' entries, chain intact'
-        . ' (ids ' . $res['head'] . '–' . $res['newest'] . ')' . PHP_EOL;
+if ($state['state'] === 'ok') {
+    echo 'audit trail: ' . $state['label'] . ' · ' . audit_chain_scope($res, (int) $res['checked']) . PHP_EOL;
 
     // The anchor is what makes a deletion of the newest entries visible.
     $anchor = audit_anchor_check($pdo);
-    if (!$anchor['ok']) {
-        $why = [
-            'deleted'   => 'the entry recorded at the last anchor is gone — the newest entries were deleted, or the database was restored from an older copy',
-            'rewritten' => 'the entry recorded at the last anchor no longer has the hash written outside the database',
-            'truncated' => 'the trail is shorter than the last anchor',
-        ];
-        fwrite(STDERR, 'audit anchor: BROKEN at entry #' . (int) ($anchor['id'] ?? 0) . ' — '
-            . ($why[$anchor['reason']] ?? 'unexpected anchor state') . PHP_EOL);
+    $end    = audit_anchor_state($anchor);
+
+    if ($end['state'] === 'broken') {
+        fwrite(STDERR, 'audit anchor: ' . $end['label'] . ' — ' . $end['detail'] . PHP_EOL);
         fwrite(STDERR, 'anchor file: ' . (string) ($anchor['anchor']['file'] ?? audit_anchor_file()) . PHP_EOL);
         exit(1);
     }
 
-    if ($anchor['reason'] === 'none') {
-        echo 'audit anchor: none recorded yet' . PHP_EOL;
-    } else {
-        echo 'audit anchor: matches the last anchor (id ' . (int) $anchor['id']
-            . ', written ' . (string) ($anchor['anchor']['at'] ?? '?') . ')' . PHP_EOL;
-    }
+    echo 'audit anchor: ' . $end['label'] . PHP_EOL;
 
     if ($noAnchor) {
         echo 'audit anchor: not advanced (--no-anchor)' . PHP_EOL;
@@ -90,14 +85,6 @@ if ($res['ok']) {
     exit(0);
 }
 
-$reasons = [
-    'missing' => 'the entry carries no hash — it was written outside the application',
-    'link'    => 'the entry no longer links to the entry before it',
-    'content' => 'the entry no longer matches the hash recorded for it',
-];
-
-$broken = $res['broken'] ?? ['id' => 0, 'reason' => 'link'];
-echo 'audit trail: FIRST BROKEN LINK at entry #' . (int) $broken['id'] . ' — '
-    . ($reasons[$broken['reason']] ?? 'unexpected chain state') . PHP_EOL;
-echo 'checked ' . $res['checked'] . ' entries up to that point; newest id ' . (int) $res['newest'] . PHP_EOL;
+echo 'audit trail: ' . $state['label'] . ' — ' . $state['detail'] . PHP_EOL;
+echo 'checked ' . (int) $res['checked'] . ' entries up to that point; newest id ' . (int) $res['newest'] . PHP_EOL;
 exit(1);

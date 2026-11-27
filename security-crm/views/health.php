@@ -9,7 +9,15 @@
  * is what makes it safe to open in front of an auditor; the checks mirror what
  * an ISO 27001 assessor asks first — is the evidence trail intact, is there a
  * recent backup, and are the folders the app writes to actually writable.
+ *
+ * The chain check is bounded by default: it re-walks the newest HEALTH_TAIL_WALK
+ * entries and always compares the anchor. A page that hashes every row on each
+ * load gets slower every day the trail grows, for a proof nobody asked for yet;
+ * ?verify=1 walks the whole trail for the reader who needs that answer.
  */
+
+/** Newest entries re-walked by the quick check. */
+const HEALTH_TAIL_WALK = 500;
 
 $appRoot    = dirname(__DIR__);
 $uploadsDir = $appRoot . '/uploads';
@@ -95,45 +103,24 @@ $add('Database', 'Tables and rows', $tables . ' table(s) · ' . number_format($t
 
 /* --------------------------------------------------------- audit trail */
 
-$chain = audit_verify($pdo);
-if ($chain['checked'] === 0) {
-    $add('Audit trail', 'Hash chain', 'empty — nothing recorded yet', 'warn',
-        'the chain starts with the first recorded action');
-} elseif ($chain['ok']) {
-    $add('Audit trail', 'Hash chain',
-        'intact · ' . number_format($chain['checked']) . ' entries (ids ' . (int) $chain['head'] . '–' . (int) $chain['newest'] . ')', 'ok',
-        'every hash matches and each entry links to the one before it');
-} else {
-    $why = ['missing' => 'was written outside the application',
-            'link'    => 'no longer links to the entry before it',
-            'content' => 'no longer matches its stored hash'][$chain['broken']['reason'] ?? ''] ?? 'is in an unexpected state';
-    $add('Audit trail', 'Hash chain', 'first broken link at #' . (int) ($chain['broken']['id'] ?? 0), 'fail',
-        'entry #' . (int) ($chain['broken']['id'] ?? 0) . ' ' . $why
-        . ' — export the trail and keep the anchor file before changing anything');
-}
+// Quick: the newest entries plus the anchor. Full: every entry, on request.
+$walkAll    = isset($_GET['verify']);
+$chainTotal = (int) $pdo->query('SELECT COUNT(*) FROM audit_log')->fetchColumn();
+$chain      = $walkAll ? audit_verify($pdo) : audit_verify_tail($pdo, HEALTH_TAIL_WALK);
+$chainState = audit_chain_state($chain);
+$chainTone  = ['ok' => 'ok', 'broken' => 'fail'][$chainState['state']] ?? 'warn';
 
-$end = audit_anchor_check($pdo);
-switch ((string) $end['reason']) {
-    case 'none':
-        $add('Audit trail', 'External anchor', 'none recorded yet', 'warn',
-            'run php tests/verify-audit.php once so a deletion of the newest entries becomes visible');
-        break;
+$add('Audit trail', 'Hash chain',
+    $chainState['label'] . ' · ' . audit_chain_scope($chain, $chainTotal), $chainTone,
+    $chainState['detail']
+    . ($chainState['state'] !== 'empty' && $chain['checked'] < $chainTotal
+        ? ' · older entries need "Walk the whole chain" below'
+        : ''));
 
-    case 'ok':
-        $at = strtotime((string) ($end['anchor']['at'] ?? ''));
-        $add('Audit trail', 'External anchor',
-            'matches entry #' . (int) $end['id'] . ($at ? ' · ' . date('d M Y H:i', $at) : ''), 'ok',
-            'the newest entries still match what was recorded outside the database');
-        break;
-
-    default:
-        $why = [
-            'deleted'   => 'the anchored entry is gone — the newest entries were deleted, or the database was restored from an older copy',
-            'rewritten' => 'the anchored entry no longer has the hash written outside the database',
-            'truncated' => 'the trail is shorter than the last anchor',
-        ][(string) $end['reason']] ?? 'unexpected anchor state';
-        $add('Audit trail', 'External anchor', 'BROKEN at #' . (int) ($end['id'] ?? 0), 'fail', $why);
-}
+$end         = audit_anchor_check($pdo);
+$anchorState = audit_anchor_state($end);
+$add('Audit trail', 'External anchor', $anchorState['label'],
+    ['ok' => 'ok', 'broken' => 'fail'][$anchorState['state']] ?? 'warn', $anchorState['detail']);
 
 $anchorPath = audit_anchor_file();
 $anchorWritable = is_writable(dirname($anchorPath));
@@ -263,8 +250,19 @@ audit('health.view', 'session', null, 'System self-check', $fails . ' failing, '
 </section>
 <?php endforeach; ?>
 
+<div class="toolbar">
+  <?php if ($walkAll): ?>
+    <a class="btn btn--ghost btn--sm" href="?page=health">Back to the quick check</a>
+    <span class="muted">Every entry was walked on this load — the anchor still needs the console verifier, which is what records it.</span>
+  <?php else: ?>
+    <a class="btn btn--ghost btn--sm" href="?page=health&amp;verify=1">Walk the whole chain</a>
+    <span class="muted">The quick check re-walks the newest <?= number_format(HEALTH_TAIL_WALK) ?> entries and compares the anchor; a break in an older entry needs the full walk.</span>
+  <?php endif; ?>
+</div>
+
 <p class="muted">
   The chain and the anchor are explained under <a class="link" href="?page=audit">Audit trail</a>,
   and the backup / restore drill is in README.md ("Backups and restore").
-  This page is the browser version of <span class="mono">php tests/verify-audit.php --no-anchor</span>.
+  This page reads the trail; <span class="mono">php tests/verify-audit.php</span> does the same from a
+  console and records a new anchor.
 </p>

@@ -81,23 +81,11 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
 
 <?php if ($verify !== null): ?>
   <?php
-  $chain    = $verify;
-  $broken   = $chain['broken'] ?? null;
-  $anch     = $chain['anchor'];
-  $chainOk  = (bool) $chain['ok'];
-  $anchOk   = (bool) ($anch['ok'] ?? true);
-  $pass     = $chainOk && $anchOk;
-  $reasons  = [
-      'missing' => 'the entry carries no hash — it was written outside the application',
-      'link'    => 'the entry no longer links to the entry before it',
-      'content' => 'the entry no longer matches the hash recorded for it',
-  ];
-  $anchorWhy = [
-      'deleted'   => 'the entry recorded at the anchor is gone — the newest entries were deleted, or the database was restored from an older copy',
-      'rewritten' => 'the entry recorded at the anchor no longer has the hash written outside the database',
-      'truncated' => 'the trail is shorter than the anchor',
-  ];
-  $anchoredAt = strtotime((string) ($anch['anchor']['at'] ?? ''));
+  $chain       = $verify;
+  $anch        = $chain['anchor'];
+  $chainState  = audit_chain_state($chain);
+  $anchorState = audit_anchor_state($anch);
+  $pass        = $chainState['state'] !== 'broken' && $anchorState['state'] !== 'broken';
   ?>
   <section class="card" role="status">
     <div class="card__head">
@@ -105,43 +93,28 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
       <?= badge($pass ? 'Chain intact' : 'Attention needed', $pass ? 'green' : 'red') ?>
     </div>
 
-    <?php if ($chain['checked'] === 0): ?>
-      <p class="muted">The trail is empty — there is nothing to check yet.</p>
-    <?php elseif ($chainOk): ?>
+    <?php if ($chainState['state'] === 'empty'): ?>
+      <p class="muted"><?= e(ucfirst($chainState['label'])) ?> — there is nothing to check yet.</p>
+    <?php elseif ($chainState['state'] === 'ok'): ?>
       <p>
         <strong><?= number_format($chain['checked']) ?> entries checked</strong>
-        (ids <?= (int) $chain['head'] ?>–<?= (int) $chain['newest'] ?>).
-        Every hash matches its stored row and each entry links to the one before it.
+        (ids <?= number_format((int) $chain['head']) ?>–<?= number_format((int) $chain['newest']) ?>):
+        <?= e($chainState['detail']) ?>.
       </p>
     <?php else: ?>
       <p>
-        <strong>First broken link at entry #<?= (int) ($broken['id'] ?? 0) ?></strong> —
-        <?= e($reasons[$broken['reason'] ?? ''] ?? 'the chain is in an unexpected state') ?>.
-      </p>
-      <p class="muted">
-        Checked <?= number_format($chain['checked']) ?> entries up to that point; the newest id is
-        <?= (int) $chain['newest'] ?>. Export the trail and keep the anchor file before changing anything.
+        <strong><?= e(ucfirst($chainState['detail'])) ?></strong>.
+        Read <?= number_format($chain['checked']) ?> entries; the newest id is
+        <?= number_format((int) $chain['newest']) ?>.
       </p>
     <?php endif; ?>
 
-    <?php if ($anch['reason'] === 'none'): ?>
-      <p class="muted">
-        Anchor: none recorded yet, so a deletion of the <em>newest</em> entries cannot be ruled out
-        (nothing follows them, so no link breaks). Run <span class="mono">php tests/verify-audit.php</span>
-        once on the server to anchor the head outside the database.
-      </p>
-    <?php elseif ($anchOk): ?>
-      <p class="muted">
-        Anchor: matches entry #<?= (int) $anch['id'] ?><?= $anchoredAt ? ' recorded on ' . e(date('d M Y H:i', $anchoredAt)) : '' ?> —
-        the newest entries are still the ones recorded outside the database.
-      </p>
-    <?php else: ?>
-      <p class="muted">
-        Anchor: BROKEN at entry #<?= (int) ($anch['id'] ?? 0) ?> —
-        <?= e($anchorWhy[$anch['reason'] ?? ''] ?? 'unexpected anchor state') ?>.
+    <p class="muted">
+      Anchor: <?= e($anchorState['label']) ?> — <?= e($anchorState['detail']) ?>.
+      <?php if ($anchorState['state'] === 'broken'): ?>
         File: <span class="mono"><?= e((string) ($anch['anchor']['file'] ?? audit_anchor_file())) ?></span>
-      </p>
-    <?php endif; ?>
+      <?php endif; ?>
+    </p>
   </section>
 <?php endif; ?>
 

@@ -372,7 +372,7 @@ and now show their raw action key (for example `cctv.prune`).
 | `?page=ot` | **OT vulnerability register** — daily FA monitoring: business location, vulnerability type (with *Other*), importance, report confirmation date, target facilities/systems, remarks, current status, recent contact, PC risk management, risk control, owner and due date |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
 | `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters, a **Verify integrity** button that re-walks the hash chain and an in-page anchor check, and a CSV export |
-| `?page=health` | **System self-check** (administrator) — verdict plus PHP version, schema state, hash chain and anchor, storage permissions, how old the newest database dump is, and the configuration that changes security behaviour |
+| `?page=health` | **System self-check** (administrator) — verdict plus PHP version, schema state, hash chain (newest 500 entries; **Walk the whole chain** re-reads every one) and anchor, storage permissions, how old the newest database dump is, and the configuration that changes security behaviour |
 | `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and uncaught exceptions the browser never sees |
 
 Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
@@ -627,16 +627,25 @@ current tail under a row lock, so two simultaneous events cannot both link to th
 
 ```bash
 php tests/verify-audit.php
-# audit trail: 123 entries, chain intact (ids 1–123)          exit 0
-# audit trail: FIRST BROKEN LINK at entry #60 — the entry no
-#   longer matches the hash recorded for it                   exit 1
+# audit trail: chain intact · all 123 entries (ids 1–123)          exit 0
+# audit trail: first broken link at #60 — entry #60 no longer
+#   matches the hash recorded for it                               exit 1
 ```
 
 **Verify integrity** on the trail page runs the same walk in the browser, so the reader who needs the
-proof does not need a shell: it answers `chain intact (ids 1–N)`, or names the first broken entry and
-why, and compares the newest entry with the anchor file. It writes nothing — not a row, not an audit
-event — so the trail an auditor checks is byte-for-byte the trail that was there before the click.
-Anchoring stays with the console verifier, which is the one you put in cron.
+proof does not need a shell: it answers `chain intact · all N entries (ids 1–N)`, or names the first
+broken entry and why, and compares the newest entry with the anchor file. It writes nothing — not a
+row, not an audit event — so the trail an auditor checks is byte-for-byte the trail that was there
+before the click. Anchoring stays with the console verifier, which is the one you put in cron.
+
+The self-check on `?page=health` prints the same two sentences, from the same helpers, so the
+console, the trail page and the self-check cannot describe one break three different ways. Its chain
+row re-walks the newest 500
+entries on every load and always compares the anchor: hashing a trail that only grows on every page
+load is a cost that rises forever for an answer nobody asked for, so **Walk the whole chain**
+(`?page=health&verify=1`) does the full walk when it is wanted. The scope is printed either way —
+`all 134 entries (ids 1–134)` or `the newest 500 of 12,431 entries` — so a partial walk is never
+mistaken for a clean bill of health.
 
 It walks `audit_log` in id order, recomputes each hash and follows each link, stopping at the first
 entry that does not match: a changed field reads as *no longer matches the hash*, a deleted row as

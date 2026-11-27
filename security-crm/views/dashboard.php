@@ -5,6 +5,8 @@
 $agg = $pdo->query("SELECT
     (SELECT COUNT(*) FROM sops WHERE status = 'Active') AS sops_active,
     (SELECT COUNT(*) FROM sops WHERE status = 'In Review') AS sops_review,
+    (SELECT COUNT(*) FROM sops WHERE status <> 'Obsolete'
+        AND review_at IS NOT NULL AND review_at < CURDATE()) AS sops_overdue,
     (SELECT COUNT(*) FROM issues WHERE status IN ('Open','In Progress')) AS issues_open,
     (SELECT COUNT(*) FROM issues WHERE severity = 'Critical' AND status <> 'Resolved') AS issues_critical,
     (SELECT COUNT(*) FROM issues WHERE due_at < CURDATE() AND status <> 'Resolved') AS issues_overdue,
@@ -16,17 +18,18 @@ $agg = $pdo->query("SELECT
     (SELECT COUNT(*) FROM exceptions WHERE status = 'Active'
         AND period_end BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)) AS exc_soon")->fetch() ?: [];
 
-$statSops   = (int) ($agg['sops_active'] ?? 0);
-$statReview = (int) ($agg['sops_review'] ?? 0);
-$statOpen   = (int) ($agg['issues_open'] ?? 0);
-$statCrit   = (int) ($agg['issues_critical'] ?? 0);
-$statOver   = (int) ($agg['issues_overdue'] ?? 0);
-$statFiles  = (int) ($agg['files'] ?? 0);
-$statPeople = (int) ($agg['people'] ?? 0);
-$statTpl    = (int) ($agg['templates'] ?? 0);
-$statUsers  = (int) ($agg['users'] ?? 0);
-$excActive  = (int) ($agg['exc_active'] ?? 0);
-$excSoon    = (int) ($agg['exc_soon'] ?? 0);
+$statSops       = (int) ($agg['sops_active'] ?? 0);
+$statReview     = (int) ($agg['sops_review'] ?? 0);
+$statReviewOver = (int) ($agg['sops_overdue'] ?? 0);
+$statOpen       = (int) ($agg['issues_open'] ?? 0);
+$statCrit       = (int) ($agg['issues_critical'] ?? 0);
+$statOver       = (int) ($agg['issues_overdue'] ?? 0);
+$statFiles      = (int) ($agg['files'] ?? 0);
+$statPeople     = (int) ($agg['people'] ?? 0);
+$statTpl        = (int) ($agg['templates'] ?? 0);
+$statUsers      = (int) ($agg['users'] ?? 0);
+$excActive      = (int) ($agg['exc_active'] ?? 0);
+$excSoon        = (int) ($agg['exc_soon'] ?? 0);
 $excList    = $pdo->query("SELECT id, code, title, category, target, period_end, owner, status
                               FROM exceptions WHERE status <> 'Revoked'
                              ORDER BY period_end ASC LIMIT 5")->fetchAll();
@@ -43,6 +46,13 @@ $heat = $pdo->query('SELECT likelihood, impact, COUNT(*) c FROM issues WHERE sta
 foreach ($heat as $h) {
     $byRating[risk_rating((int) $h['likelihood'] * (int) $h['impact'])[0]] += (int) $h['c'];
 }
+
+// A review date that has passed is a finding, not a schedule item: the list
+// below shows both, oldest first, so a lapsed policy cannot hide behind the
+// ones that are still coming up.
+$overdueReviews = $pdo->query("SELECT code, title, review_at, owner FROM sops
+    WHERE status <> 'Obsolete' AND review_at IS NOT NULL AND review_at < CURDATE()
+    ORDER BY review_at ASC LIMIT 5")->fetchAll();
 
 $upcoming = $pdo->query("SELECT code, title, review_at, owner FROM sops
     WHERE status <> 'Obsolete' AND review_at IS NOT NULL AND review_at >= CURDATE()
@@ -117,7 +127,7 @@ $ageMax   = max(1, ...array_column($ageBuckets, 1));
   <article class="card stat stat--blue">
     <p class="stat__label">Active documents</p>
     <p class="stat__value"><?= $statSops ?></p>
-    <p class="stat__hint"><?= $statReview ?> in review</p>
+    <p class="stat__hint"><?= $statReview ?> in review<?= $statReviewOver ? ' · ' . $statReviewOver . ' overdue for review' : '' ?></p>
   </article>
   <article class="card stat stat--red">
     <p class="stat__label">Open issues</p>
@@ -236,9 +246,41 @@ $ageMax   = max(1, ...array_column($ageBuckets, 1));
       <?php if (!$feed): ?><li class="feed__item"><p class="muted">No activity yet.</p></li><?php endif; ?>
     </ul>
 
-    <details class="more more--inner" data-more>
-      <summary>Next document reviews</summary>
+    <details class="more more--inner" data-more <?= $overdueReviews ? 'open' : '' ?>>
+      <summary>Document reviews <span class="more__hint"><?= $statReviewOver ?> overdue · <?= count($upcoming) ?> coming up</span></summary>
       <div class="more__body">
+        <div class="table-wrap">
+          <table class="table table--tight">
+            <caption class="sr-only">Documents past their review date, oldest first</caption>
+            <thead>
+              <tr><th>Overdue</th><th></th><th>Was due</th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($overdueReviews as $u): ?>
+              <?php $late = (int) floor((strtotime(date('Y-m-d')) - strtotime((string) $u['review_at'])) / 86400); ?>
+              <tr>
+                <td class="mono"><?= e($u['code']) ?></td>
+                <td><?= e($u['title']) ?><span class="muted"> · <?= e($u['owner']) ?></span></td>
+                <td class="nowrap">
+                  <?= badge($late . ' day' . ($late === 1 ? '' : 's') . ' late', 'red') ?>
+                  <span class="muted"><?= fmt_date($u['review_at']) ?></span>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            <?php if (!$overdueReviews): ?>
+              <tr><td colspan="3" class="muted">No document is past its review date.</td></tr>
+            <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+        <?php if ($statReviewOver > count($overdueReviews)): ?>
+          <p class="footnote">The <?= count($overdueReviews) ?> oldest are listed; <?= $statReviewOver ?> documents are past their review date in total.</p>
+        <?php endif; ?>
+
+        <header class="card__head card__head--sub">
+          <h3>Coming up</h3>
+          <span class="muted">review dates ahead</span>
+        </header>
         <div class="table-wrap">
           <table class="table table--tight">
             <tbody>
