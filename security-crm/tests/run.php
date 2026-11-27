@@ -19,6 +19,7 @@ require __DIR__ . '/../lib/audit.php';
 require __DIR__ . '/../lib/notify.php';
 require __DIR__ . '/../lib/auth.php';
 require __DIR__ . '/../lib/sops.php';
+require __DIR__ . '/../router.php';   // rules only; the CLI guard stops dispatch
 
 $pass = 0;
 $fail = 0;
@@ -532,6 +533,62 @@ ck('client ip falls back to the peer', client_ip(), '127.0.0.1');
 
 $_SERVER = $savedServer;
 unset($GLOBALS['secops_config']);
+
+/* ---------------------------------------------------------------- URL paths */
+
+// The dev router must deny the files that would expose the installation: the
+// database dumps in backups/, CLI tools, dotfiles and archives. These cases are
+// the regression test for the exposure fixed on 2026-11-27.
+$deniedPaths = [
+    '/.htaccess', '/.git/config', '/.env',
+    '/assets/../.htaccess', '/assets/%2e%2e/.htaccess',
+    '/backups/', '/backups/secops-crm-20260101-000000.sql.gz',
+    '/tools/backup.php', '/logs/app.log', '/uploads/evidence.pdf',
+    '/lib/db.php', '/tests/run.php', '/router.php',
+    '/schema.sql', '/README.md', '/help.md',
+    '/dump.zip', '/dump.tar', '/dump.sql.gz', '/crm.sqlite', '/crm.db',
+    '/config.php.bak', '/notes.md', '/x.swp', "/x\0.txt",
+];
+foreach ($deniedPaths as $denied) {
+    ck('router denies ' . str_replace("\0", '\\0', $denied), router_denied_path($denied), true);
+}
+
+foreach (['/assets/app.css', '/assets/app.js', '/sw.js', '/offline.html'] as $served) {
+    ck('router serves ' . $served, router_servable_path($served), true);
+}
+
+foreach (['/', '/index.php', '/?page=dashboard', '/favicon.ico'] as $routed) {
+    ck('router does not serve ' . $routed, router_servable_path($routed), false);
+}
+// The rule admits the path; the router then answers 404 because no such file
+// exists, rather than falling through to a page of HTML.
+ck('router admits a missing asset path for a 404', router_servable_path('/assets/missing.css'), true);
+ck('router never serves a backup', router_servable_path('/backups/x.sql.gz'), false);
+ck('router never serves a dotfile', router_servable_path('/.htaccess'), false);
+
+/* ------------------------------------------------------- 403 back-link */
+
+ck('403 back keeps a same-host referrer',
+    local_back_target('https://secops.local/index.php?page=issues&p=2', 'secops.local'),
+    '/index.php?page=issues&p=2');
+ck('403 back refuses another host',
+    local_back_target('https://evil.example/phish', 'secops.local'), '?page=dashboard');
+ck('403 back refuses protocol-relative',
+    local_back_target('//evil.example/phish', 'secops.local'), '?page=dashboard');
+ck('403 back refuses a backslash host',
+    local_back_target('/\\evil.example', 'secops.local'), '?page=dashboard');
+ck('403 back refuses userinfo',
+    local_back_target('https://secops.local@evil.example/x', 'secops.local'), '?page=dashboard');
+ck('403 back refuses a different port',
+    local_back_target('https://secops.local:8443/x', 'secops.local'), '?page=dashboard');
+ck('403 back keeps the matching port',
+    local_back_target('http://secops.local:8080/x', 'secops.local:8080'), '/x');
+ck('403 back keeps a query-only referrer',
+    local_back_target('?page=sop', 'secops.local'), '?page=sop');
+ck('403 back refuses an empty referrer',
+    local_back_target(null, 'secops.local'), '?page=dashboard');
+ck('403 back matches the host case-insensitively',
+    local_back_target('https://SECOPS.local/page', 'secops.local'), '/page');
 
 echo $fail === 0
     ? "OK — {$pass} checks passed\n"

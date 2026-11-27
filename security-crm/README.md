@@ -120,8 +120,10 @@ From inside the `security-crm` folder:
 php -S localhost:8000 router.php
 ```
 
-`router.php` applies the same denies as `.htaccess`, so `schema.sql`,
-`README.md`, `lib/`, `tests/`, `logs/` and `uploads/` stay private.
+`router.php` is default-deny: only `assets/*`, `sw.js` and `offline.html` are
+served as files. Dotfiles, `uploads/`, `lib/`, `tests/`, `logs/`, `tools/`,
+`backups/` and archive/database extensions (`.sql`, `.sql.gz`, `.zip`, `.db`…)
+answer 404, so `schema.sql`, `README.md` and a database dump stay private.
 
 ## Intranet deployment
 
@@ -560,8 +562,8 @@ views/               header, footer, login and one file per page
 assets/app.css       design tokens + all styling (red / blue / orange accents)
 assets/app.js        drag & drop, delete confirms, dropzone, live risk score
 schema.sql           optional manual import
-.htaccess            Apache hardening: deny uploads/lib/tests, deflate, caching
-router.php           same denies for the PHP built-in server (php -S … router.php)
+.htaccess            Apache hardening: denies dotfiles, archives, uploads/lib/tests/logs/tools/backups
+router.php           default-deny dev router (only assets/*, sw.js, offline.html are files)
 tests/run.php        dependency-free unit checks (php tests/run.php)
 tests/verify-audit.php  re-reads the trail and checks its hash chain
 logs/app.log         error log written by the exception handler
@@ -820,14 +822,20 @@ evidence* says above.
 2. Set `SECOPS_DEMO=0` to hide the demo account list on the sign-in page.
 3. Serve over HTTPS — the app then sets `Secure` cookies and HSTS.
 4. Keep `security-crm/.htaccess` active on Apache (it denies `/uploads`, `/lib`,
-   `/tests`, `*.sql` and `*.md`, and enables compression + asset caching). On
-   Nginx use:
+   `/tests`, `/logs`, `/tools`, `/backups`, dotfiles, archives and `*.sql`/`*.md`,
+   and enables compression + asset caching). On Nginx use:
 
 ```nginx
+# Private folders: evidence, code, tests, logs, dumps and CLI tools.
 location ^~ /secops-crm/uploads/ { deny all; }
 location ^~ /secops-crm/lib/     { deny all; }
 location ^~ /secops-crm/tests/   { deny all; }
-location ~* ^/secops-crm/.*\.(sql|md)$ { deny all; }
+location ^~ /secops-crm/logs/    { deny all; }
+location ^~ /secops-crm/tools/   { deny all; }
+location ^~ /secops-crm/backups/ { deny all; }
+# Dotfiles and archives/database files anywhere in the app.
+location ~ /\.                 { deny all; }
+location ~* \.(sql|gz|tgz|tar|bz2|7z|rar|zip|md|log|ini|json|env|sh|bak|swp|swo|old|orig|dist|sqlite|db)$ { deny all; }
 gzip on;
 ```
 

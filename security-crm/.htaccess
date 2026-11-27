@@ -1,8 +1,19 @@
 # SecOps CRM — Apache hardening and performance (Laragon and any mod_php host).
 # Nginx equivalents are documented in README.md.
 
+# Every private folder is denied below. This keeps a mistake in that list from
+# turning into a browsable index of backups/, uploads/ or logs/.
+<IfModule mod_autoindex.c>
+  Options -Indexes
+</IfModule>
+
 <IfModule mod_authz_core.c>
-  <FilesMatch "\.(sql|sql\.gz|gz|md|log|ini|json|env)$">
+  # Dotfiles are never web content: .htaccess, .git, .env, editor backups.
+  <FilesMatch "^\.">
+    Require all denied
+  </FilesMatch>
+  # Archives, database files and backups are never served as static files.
+  <FilesMatch "\.(sql|gz|tgz|tar|bz2|7z|rar|zip|md|log|ini|json|env|sh|bak|swp|swo|old|orig|dist|sqlite|db)$">
     Require all denied
   </FilesMatch>
 </IfModule>
@@ -12,6 +23,10 @@
   # Evidence, library code, backups and test helpers are reachable only
   # through index.php (permission-checked) — never as static files.
   RewriteRule ^(uploads|lib|tests|logs|tools|backups)/ - [F,L]
+  # Dot segments and dotfiles at any depth (assets/../.htaccess). .well-known
+  # stays reachable in case a certificate check is added later.
+  RewriteCond %{REQUEST_URI} !\.well-known/
+  RewriteRule (^|/)\. - [F,L]
 </IfModule>
 
 <IfModule mod_deflate.c>

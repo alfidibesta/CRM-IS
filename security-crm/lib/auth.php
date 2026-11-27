@@ -285,13 +285,59 @@ function require_permission(string $perm): void
     forbidden_page($perm);
 }
 
+/**
+ * The 403 page's "Go back" target: the referrer, but only when it is this
+ * site.
+ *
+ * An absolute referrer must carry the same host — and the same port, when it
+ * names one — as this request. Protocol-relative (//evil.example), backslash
+ * and userinfo forms are refused. Anything that does not match falls back to
+ * the dashboard, so a link to another site is never reflected here.
+ */
+function local_back_target(?string $referer, string $host): string
+{
+    $fallback = '?page=dashboard';
+    if ($referer === null || $referer === '' || str_contains($referer, '\\')
+        || preg_match('/[\x00-\x1F\x7F]/', $referer) === 1) {
+        return $fallback;
+    }
+
+    $parts = parse_url($referer);
+    if (!is_array($parts) || isset($parts['user']) || isset($parts['pass'])) {
+        return $fallback;
+    }
+
+    if (isset($parts['host'])) {
+        $selfHost = parse_url('http://' . $host, PHP_URL_HOST);
+        $selfPort = parse_url('http://' . $host, PHP_URL_PORT);
+        $port     = $parts['port'] ?? null;
+        if (!is_string($selfHost) || strcasecmp((string) $parts['host'], $selfHost) !== 0) {
+            return $fallback;
+        }
+        if ($port !== null && (int) $port !== (int) ($selfPort ?: 80)) {
+            return $fallback;
+        }
+    }
+
+    $path  = (string) ($parts['path'] ?? '');
+    $query = (string) ($parts['query'] ?? '');
+
+    if ($path !== '' && ($path[0] !== '/' || str_starts_with($path, '//'))) {
+        return $fallback;
+    }
+    if ($path === '' && $query === '') {
+        return $fallback;
+    }
+
+    return $path . ($query !== '' ? '?' . $query : '');
+}
+
 function forbidden_page(string $perm): void
 {
     http_response_code(403);
     $label = permission_list()[$perm] ?? $perm;
     $role  = role_label(current_user()['role'] ?? '');
-    $back  = isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : '?page=dashboard';
-    $back  = preg_replace('/[^a-zA-Z0-9_\-\?=&%.\/:]/', '', $back) ?: '?page=dashboard';
+    $back  = local_back_target($_SERVER['HTTP_REFERER'] ?? null, (string) ($_SERVER['HTTP_HOST'] ?? ''));
     if (is_logged_in()) {
         audit('access.denied', 'session', null, $label, 'Blocked for ' . $role . ' on ?page=' . (string) ($_GET['page'] ?? ''));
     }
