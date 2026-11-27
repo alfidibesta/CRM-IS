@@ -1355,13 +1355,20 @@ if ($page === 'download') {
     ];
     $dl = $row['ext'] !== '' && ($row['ext'] === 'png' || $row['ext'] === 'jpg' || $row['ext'] === 'jpeg' || $row['ext'] === 'gif' || $row['ext'] === 'webp') && isset($_GET['inline']);
 
+    // The uploader typed this name, so it goes through the same header-safe
+    // helper as the Word exports. The extension comes from the stored column,
+    // which is also what the Content-Type above is chosen from.
+    $ext  = preg_replace('/[^a-z0-9]/', '', strtolower((string) $row['ext'])) ?? '';
+    $name = safe_filename((string) pathinfo((string) $row['original_name'], PATHINFO_FILENAME), 'evidence')
+        . ($ext !== '' ? '.' . $ext : '');
+
     audit('file.download', 'file', (int) $row['id'], (string) $row['original_name'],
         'Evidence · ' . human_size((int) $row['size_bytes']));
 
     header('Content-Type: ' . ($types[$row['ext']] ?? 'application/octet-stream'));
     header('Content-Length: ' . filesize($path));
     header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: ' . ($dl ? 'inline' : 'attachment') . '; filename="' . str_replace('"', '', (string) $row['original_name']) . '"');
+    header('Content-Disposition: ' . ($dl ? 'inline' : 'attachment') . '; filename="' . $name . '"');
     readfile($path);
     exit;
 }

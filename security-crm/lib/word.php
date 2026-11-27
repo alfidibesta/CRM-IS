@@ -298,12 +298,29 @@ function docx_package(array $blocks, array $fill = [], array $props = []): strin
     ]);
 }
 
+/**
+ * Header-safe attachment name, shared by every download route.
+ *
+ * Only ASCII letters, digits, dot, dash and underscore survive, so a name a
+ * user typed can never break out of the quoted Content-Disposition value or
+ * hide a file behind a leading dot. Leading and trailing dots/dashes are
+ * trimmed; when nothing usable remains the fallback is used instead.
+ */
+function safe_filename(string $name, string $fallback = 'document'): string
+{
+    $name = basename(str_replace('\\', '/', $name));
+    $safe = preg_replace('/[^A-Za-z0-9._-]/', '_', $name) ?? '';
+    $safe = trim($safe, '._-');
+
+    return $safe !== '' ? $safe : $fallback;
+}
+
 /** Stream a .docx to the browser and stop. */
 function docx_send(string $filename, string $bytes): void
 {
-    $safe = preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) ?: 'document.docx';
-    if (stripos($safe, '.docx') === false) {
-        $safe .= '.docx';
+    $safe = safe_filename($filename, 'document.docx');
+    if (strtolower((string) pathinfo($safe, PATHINFO_EXTENSION)) !== 'docx') {
+        $safe = safe_filename((string) pathinfo($safe, PATHINFO_FILENAME), 'document') . '.docx';
     }
     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     header('Content-Disposition: attachment; filename="' . $safe . '"');

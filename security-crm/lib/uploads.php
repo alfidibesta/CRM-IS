@@ -152,6 +152,46 @@ function store_upload(array $file): array
     ];
 }
 
+/**
+ * Every evidence file under $dir, keyed by its path relative to the folder.
+ *
+ * Used by tools/backup.php: the manifest records each file's size, sha256 and
+ * modification time, and --check compares a restored folder file by file. The
+ * directory's own .htaccess is hardening, not evidence, so it is left out, as
+ * are symlinks (which could point outside uploads/).
+ *
+ * @return array<string, array{bytes: int, sha256: string, modified: string}>
+ */
+function uploads_inventory(string $dir): array
+{
+    $dir = rtrim($dir, '/\\');
+    if ($dir === '' || !is_dir($dir)) {
+        return [];
+    }
+
+    $files = [];
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS)
+    );
+    foreach ($it as $file) {
+        if (!$file->isFile() || $file->isLink()) {
+            continue;
+        }
+        $rel = str_replace('\\', '/', substr($file->getPathname(), strlen($dir) + 1));
+        if ($rel === '' || $rel === '.htaccess') {
+            continue;
+        }
+        $files[$rel] = [
+            'bytes'    => (int) $file->getSize(),
+            'sha256'   => (string) hash_file('sha256', $file->getPathname()),
+            'modified' => date('c', $file->getMTime()),
+        ];
+    }
+    ksort($files);
+
+    return $files;
+}
+
 /** Absolute path for a stored file name (defends against traversal). */
 function stored_path(string $storedName): string
 {

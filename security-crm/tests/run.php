@@ -108,6 +108,33 @@ ck('fill tags', $fill['TAGS'], 'a, b');
 ck('upload limit sane', upload_limit_bytes() > 0 && upload_limit_bytes() <= UPLOAD_MAX_BYTES, true);
 ck('human size', human_size(1048576), '1 MB');
 
+// Evidence filenames go into a Content-Disposition header, so the helper the
+// Word exports use must leave nothing that can break out of the quoted value.
+ck('safe filename keeps an ordinary name', safe_filename('Gate log 2026.pdf'), 'Gate_log_2026.pdf');
+ck('safe filename removes quotes and newlines', safe_filename("a\"b\r\nc.pdf"), 'a_b__c.pdf');
+ck('safe filename ignores a path', safe_filename('../../etc/passwd'), 'passwd');
+ck('safe filename refuses a leading dot', safe_filename('.htaccess'), 'htaccess');
+ck('safe filename falls back when nothing survives', safe_filename('...', 'evidence'), 'evidence');
+
+// The backup manifest lists uploads/ file by file; the inventory is the one
+// function both the manifest and --check use.
+$upTmp = sys_get_temp_dir() . '/secops-uploads-' . bin2hex(random_bytes(4));
+mkdir($upTmp);
+mkdir($upTmp . '/sub');
+file_put_contents($upTmp . '/a.txt', 'abc');
+file_put_contents($upTmp . '/sub/b.bin', 'def');
+file_put_contents($upTmp . '/.htaccess', "Require all denied\n");
+$upInv = uploads_inventory($upTmp);
+ck('inventory lists every evidence file', array_keys($upInv), ['a.txt', 'sub/b.bin']);
+ck('inventory hashes the bytes', $upInv['a.txt']['sha256'], hash('sha256', 'abc'));
+ck('inventory skips the htaccess guard', isset($upInv['.htaccess']), false);
+ck('inventory totals the sizes', array_sum(array_column($upInv, 'bytes')), 6);
+unlink($upTmp . '/a.txt');
+unlink($upTmp . '/sub/b.bin');
+unlink($upTmp . '/.htaccess');
+rmdir($upTmp . '/sub');
+rmdir($upTmp);
+
 /* ------------------------------------------------------------ audit trail */
 ck('audit label', audit_action_label('issue.create'), 'Issue created');
 ck('audit label falls back', audit_action_label('nope'), 'nope');

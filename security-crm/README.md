@@ -687,7 +687,9 @@ sha256    efffdb199c296925fd536054e1e2fdf1f7e160973f0b39adec2157d338f9d2ae
 tables    17 · 386 rows
 audit     head #133 of 133 entries · 9a7c01dc9ed0…
 manifest  backups/secops-crm-20261127-123535.json
+uploads   12 file(s), 1.8 MB · tree 4a91c2d0e8f1…
 restore   scratch database + SECOPS_DB_NAME=<scratch> php tests/verify-audit.php
+check     php tools/backup.php --check=backups/secops-crm-20261127-123535.json
 ```
 
 It reads the connection from `config.php` (or the `SECOPS_DB_*` variables), connects **read-only**
@@ -696,12 +698,15 @@ files into `backups/`:
 
 - **`secops-crm-<date>-<time>.sql.gz`** — a `--single-transaction` dump, consistent even while
   people are using the app, which is also what keeps the audit chain inside it valid.
-- **`secops-crm-<date>-<time>.json`** — the manifest: sha256, size, per-table row counts, and the
-  trail's newest id and hash. This is what you compare against after a restore.
+- **`secops-crm-<date>-<time>.json`** — the manifest: sha256, size, per-table row counts, the
+  trail's newest id and hash, and an `uploads` section listing every evidence file with its
+  relative path, size, modification time and sha256 (plus a tree hash for the folder). This is
+  what you compare against after a restore.
 
 The dump is kept only when mysqldump wrote its own `-- Dump completed` line, so a full disk or a
 killed server fails loudly instead of leaving a plausible half file. `--keep=30` prunes to the
-newest 30, `--out=D:\backups\secops` writes elsewhere, `--help` lists both.
+newest 30, `--out=D:\backups\secops` writes elsewhere, and `--help` lists every option including
+`--check=FILE`.
 
 It needs `mysqldump` or `mariadb-dump`; when it is not on `PATH`, name it once:
 
@@ -716,11 +721,17 @@ Daily, from cron (or Task Scheduler):
 0 2 * * * cd /var/www/security-crm && php tools/backup.php --keep=30
 ```
 
-Evidence files are **not** inside the dump — copy them with it:
+Evidence files are **not** inside the dump. The manifest lists every one of them — relative path,
+size, modification time and sha256 — and a tree hash for the folder, so a restored copy can be
+checked rather than assumed. Copy them with the dump:
 
 ```bash
 tar -czf backups/uploads-$(date +%F).tar.gz uploads
 ```
+
+`php tools/backup.php --check=backups/secops-crm-…json` re-hashes the dump and every file under
+`uploads/` and names what is missing, changed or extra. It needs no database connection and exits
+0 only when both halves match the manifest.
 
 ### Restore drill
 
@@ -749,7 +760,21 @@ live installation relies on. `--no-anchor` alone is not enough, because the veri
 compare the restored copy with the live anchor and call an older (perfectly good) backup
 "restored from an older copy".
 
-**3. Compare with the manifest.** The printed `ids 1–N` must equal `audit.head_id`, and a count
+**3. Check the evidence copy.** Put the extracted `uploads/` folder back (or point a copy of the
+app at it) and run the manifest check — it reads the dump beside the manifest and the app's
+`uploads/`, never the database:
+
+```bash
+php tools/backup.php --check=backups/secops-crm-20261127-123535.json
+# dump      sha256 matches · 32.1 KB
+# uploads   12 expected · 12 present · 0 missing · 0 changed · 0 extra
+# result    OK — the dump and every evidence file match the manifest
+```
+
+A missing, changed or extra file is named on the next line and the command exits 1, so a restore
+that dropped part of the evidence folder fails the drill instead of passing quietly.
+
+**4. Compare with the manifest.** The printed `ids 1–N` must equal `audit.head_id`, and a count
 or two should match `database.row_counts`:
 
 ```sql
@@ -757,7 +782,7 @@ SELECT COUNT(*) FROM security_crm_restore_check.issues;   -- 12 in the manifest 
 SELECT COUNT(*) FROM security_crm_restore_check.audit_log; -- 133
 ```
 
-**4. Drop the scratch database.**
+**5. Drop the scratch database.**
 
 ```sql
 DROP DATABASE security_crm_restore_check;
@@ -773,7 +798,8 @@ Reading the result:
   backup, not for the one you just took.
 
 The real restore is the same thing pointed at the live database: stop the app, restore the dump,
-put the matching `uploads/` files back, then run `php tests/verify-audit.php` once. If the copy is
+put the matching `uploads/` files back, run `php tools/backup.php --check=…` and then
+`php tests/verify-audit.php` once. If the copy is
 older than the last anchor, it answers `audit anchor: BROKEN … the database was restored from an
 older copy` — that is the anchor working as designed, and the entry it names is the first one the
 restore dropped. Keep the anchor file on a different backup from the database, as *Tamper
@@ -784,8 +810,9 @@ evidence* says above.
 - **One plant, one database.** There is no tenant or site switch; a second plant
   needs a second copy and database.
 - **Files live on local disk.** Evidence and `logs/app.log` are not replicated;
-  include `security-crm/uploads/` and the database in the same backup
-  (`tools/backup.php` covers the database half).
+  include `security-crm/uploads/` and the database in the same backup. The
+  manifest lists every upload with its sha256 and `--check` verifies the copy,
+  but the tool still does not archive the files for you.
 - **Search is SQL `LIKE`.** Fine for a few thousand rows, not a search engine.
 - **Exports are `.docx` only.** PDF would need an external converter.
 - **No email.** Alerts are in-app; nothing leaves the server.
