@@ -44,6 +44,27 @@ function upload_limit_bytes(): int
     return $limits ? (int) min($limits) : UPLOAD_MAX_BYTES;
 }
 
+/**
+ * How many files PHP takes from one request (max_file_uploads, 0 = no cap).
+ *
+ * Past this number PHP drops the extra files before the application runs and
+ * leaves no entry for them in $_FILES, so the cap can only be shown up front
+ * and mentioned when a batch arrives at it.
+ */
+function upload_max_files(): int
+{
+    $n = (int) ini_get('max_file_uploads');
+    return $n > 0 ? $n : 0;
+}
+
+/** Whole request body PHP accepts (post_max_size, 0 = no cap). */
+function upload_total_bytes(): int
+{
+    $raw   = (string) ini_get('post_max_size');
+    $bytes = is_numeric($raw) ? (int) $raw : ini_bytes($raw);
+    return $bytes > 0 ? $bytes : 0;
+}
+
 function uploads_dir(): string
 {
     return dirname(__DIR__) . '/uploads';
@@ -92,7 +113,7 @@ function file_ext(string $name): string
  * dropped, so the caller only sees real selections; a single-file field is
  * returned as one entry, so the same loop stores both.
  *
- * @return list<array{name: string, type: string, tmp_name: string, error: int, size: int}>
+ * @return list<array{name: string, tmp_name: string, error: int, size: int}>
  */
 function upload_batch(array $field): array
 {
@@ -105,7 +126,6 @@ function upload_batch(array $field): array
     foreach (array_keys($names) as $i) {
         $one = [
             'name'     => (string) ($names[$i] ?? ''),
-            'type'     => (string) ($field['type'][$i] ?? ''),
             'tmp_name' => (string) ($field['tmp_name'][$i] ?? ''),
             'error'    => (int) ($field['error'][$i] ?? UPLOAD_ERR_NO_FILE),
             'size'     => (int) ($field['size'][$i] ?? 0),
@@ -157,9 +177,10 @@ function store_upload(array $file): array
         return ['ok' => false, 'error' => 'Files must be ' . human_size(upload_limit_bytes()) . ' or smaller.'];
     }
 
+    // The form lists the accepted formats; the error names only what was refused.
     $ext = file_ext($name);
     if (!in_array($ext, allowed_upload_ext(), true)) {
-        return ['ok' => false, 'error' => 'File type not allowed. Allowed: ' . implode(', ', allowed_upload_ext()) . '.'];
+        return ['ok' => false, 'error' => 'File type not allowed' . ($ext !== '' ? ' (.' . $ext . ')' : '') . '.'];
     }
 
     $mime = function_exists('finfo_open')
@@ -186,6 +207,41 @@ function store_upload(array $file): array
         'mime'   => $mime !== '' ? $mime : 'application/octet-stream',
         'ext'    => $ext,
     ];
+}
+
+/**
+ * The flash line for one batch: what was stored, then why the rest was not.
+ *
+ * @param list<string> $saved  original names that were stored
+ * @param list<string> $failed "name — reason" for each file that was not
+ * @param int $maxFiles per-upload file cap, 0 when the server has none
+ */
+function upload_batch_summary(array $saved, array $failed, int $maxFiles = 0): string
+{
+    $said = [];
+
+    if ($saved) {
+        $said[] = count($saved) === 1
+            ? 'Evidence uploaded: ' . $saved[0] . '.'
+            : count($saved) . ' evidence files uploaded.';
+    }
+
+    if ($failed) {
+        $shown  = array_slice($failed, 0, 3);
+        $more   = count($failed) - count($shown);
+        $said[] = ($saved ? count($failed) . ' not uploaded: ' : 'Nothing uploaded: ')
+            . implode('; ', array_map(static fn($one) => rtrim($one, '.'), $shown))
+            . ($more > 0 ? ' … and ' . $more . ' more' : '') . '.';
+    }
+
+    // Files past max_file_uploads never reach the app, so a batch that arrives
+    // at the cap is the one place the desk can be told the rest may be missing.
+    if ($maxFiles > 0 && count($saved) + count($failed) >= $maxFiles) {
+        $said[] = 'The server takes ' . $maxFiles . ' file' . ($maxFiles === 1 ? '' : 's')
+            . ' per upload — anything beyond that was not received.';
+    }
+
+    return $said ? implode(' ', $said) : 'No file selected.';
 }
 
 /**

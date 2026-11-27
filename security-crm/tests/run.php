@@ -113,7 +113,7 @@ ck('human size', human_size(1048576), '1 MB');
 ck('upload batch: one file in the array shape', upload_batch([
     'name' => ['a.png'], 'type' => ['image/png'], 'tmp_name' => ['/tmp/pa'],
     'error' => [UPLOAD_ERR_OK], 'size' => [11],
-]), [['name' => 'a.png', 'type' => 'image/png', 'tmp_name' => '/tmp/pa', 'error' => UPLOAD_ERR_OK, 'size' => 11]]);
+]), [['name' => 'a.png', 'tmp_name' => '/tmp/pa', 'error' => UPLOAD_ERR_OK, 'size' => 11]]);
 ck('upload batch: two files, one empty slot', array_column(upload_batch([
     'name' => ['a.png', '', 'b.txt'], 'type' => ['image/png', '', 'text/plain'],
     'tmp_name' => ['/tmp/pa', '', '/tmp/pb'], 'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE, UPLOAD_ERR_OK],
@@ -126,6 +126,21 @@ ck('upload batch: oversized file kept for store_upload to refuse', upload_batch(
     'name' => ['big.zip'], 'type' => ['application/zip'], 'tmp_name' => ['/tmp/pz'],
     'error' => [UPLOAD_ERR_INI_SIZE], 'size' => [0],
 ])[0]['error'], UPLOAD_ERR_INI_SIZE);
+
+// The batch's flash is the only account the desk gets of a mixed selection.
+ck('batch summary: one file', upload_batch_summary(['a.png'], []), 'Evidence uploaded: a.png.');
+ck('batch summary: several files', upload_batch_summary(['a.png', 'b.log'], []), '2 evidence files uploaded.');
+ck('batch summary: partial failure', upload_batch_summary(['a.png'], ['bad.exe — File type not allowed']),
+    'Evidence uploaded: a.png. 1 not uploaded: bad.exe — File type not allowed.');
+ck('batch summary: nothing stored', upload_batch_summary([], ['bad.exe — File type not allowed']),
+    'Nothing uploaded: bad.exe — File type not allowed.');
+ck('batch summary: long failure list is trimmed', upload_batch_summary([], ['a', 'b', 'c', 'd', 'e']),
+    'Nothing uploaded: a; b; c … and 2 more.');
+ck('batch summary: nothing selected', upload_batch_summary([], []), 'No file selected.');
+ck('batch summary: stays quiet below the cap', upload_batch_summary(['a'], [], 2), 'Evidence uploaded: a.');
+ck('batch summary: warns at the file cap', upload_batch_summary(['a', 'b'], [], 2),
+    '2 evidence files uploaded. The server takes 2 files per upload — anything beyond that was not received.');
+ck('upload file cap is read from the server', upload_max_files() > 0, true);
 
 // Evidence filenames go into a Content-Disposition header, so the helper the
 // Word exports use must leave nothing that can break out of the quoted value.

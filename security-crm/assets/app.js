@@ -277,6 +277,10 @@
         : Math.max(1, Math.round(n / 1024)) + ' KB';
     }
 
+    // PHP drops files past max_file_uploads before the app sees them, so the
+    // only place to say so is here, as the selection is made.
+    var maxFiles = parseInt(zone.getAttribute('data-max-files') || '0', 10) || 0;
+
     if (input && name) {
       input.addEventListener('change', function () {
         var list = input.files ? Array.prototype.slice.call(input.files) : [];
@@ -289,7 +293,10 @@
           return;
         }
         var total = list.reduce(function (sum, f) { return sum + f.size; }, 0);
-        name.textContent = list.length + ' files · ' + bytes(total) + ' in total';
+        name.textContent = list.length + ' files · ' + bytes(total) + ' in total'
+          + (maxFiles > 0 && list.length > maxFiles
+            ? ' — only the first ' + maxFiles + ' are uploaded'
+            : '');
       });
     }
   }

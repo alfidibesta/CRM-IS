@@ -212,8 +212,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($_POST) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
         http_response_code(413);
         exit('<!doctype html><meta charset="utf-8"><p style="font:14px system-ui;padding:32px">'
-            . 'That upload is larger than the server accepts (limit '
-            . htmlspecialchars(human_size(upload_limit_bytes()), ENT_QUOTES, 'UTF-8') . ').</p>');
+            . 'That upload is larger than the server accepts ('
+            . htmlspecialchars(human_size(upload_limit_bytes()) . ' per file'
+                . (upload_total_bytes() > 0 ? ', ' . human_size(upload_total_bytes()) . ' per upload' : ''), ENT_QUOTES, 'UTF-8')
+            . ').</p>');
     }
 
     $action = (string) ($_POST['action'] ?? '');
@@ -573,17 +575,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $saved[] = (string) $res['name'];
             }
 
-            $said = [];
-            if ($saved) {
-                $said[] = count($saved) === 1
-                    ? 'Evidence uploaded: ' . $saved[0] . '.'
-                    : count($saved) . ' evidence files uploaded.';
-            }
-            if ($failed) {
-                $said[] = count($failed) . ' not uploaded: ' . implode('; ', array_slice($failed, 0, 3))
-                    . (count($failed) > 3 ? ' …' : '');
-            }
-            flash($said ? implode(' ', $said) : 'No file selected.');
+            flash(upload_batch_summary($saved, $failed, upload_max_files()));
             back_to('issue', $id);
 
         case 'delete_file':

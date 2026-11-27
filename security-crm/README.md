@@ -72,7 +72,7 @@ account for 15 minutes.
 | Setting | Why it matters | Where |
 | --- | --- | --- |
 | `AllowOverride All` on the `www` directory | `security-crm/.htaccess` denies `/uploads`, `/lib`, `/tests`, `*.sql` and `*.md`, and turns on gzip + asset caching. Without it Apache ignores the file and anyone can download `schema.sql`. | `C:\laragon\bin\apache\httpd.conf` → `<Directory "C:/laragon/www">` → `AllowOverride All`, restart Apache. **Check:** <http://localhost/security-crm/schema.sql> must answer 403/404, not the file. |
-| Upload size in `php.ini` | Evidence uploads are capped at the **effective** PHP limit — the smallest of `upload_max_filesize`, `post_max_size` and the app's 8 MB — and the issue page prints that real number. Laragon's default `2M` therefore means a 2 MB cap, not 8 MB. | Menu → PHP → **php.ini**: `upload_max_filesize = 8M`, `post_max_size = 16M`, then restart Apache. |
+| Upload size in `php.ini` | Evidence uploads are capped at the **effective** PHP limit — the smallest of `upload_max_filesize`, `post_max_size` and the app's 8 MB — and the issue page prints that real number. Laragon's default `2M` therefore means a 2 MB cap, not 8 MB. A selection of several files travels as one request, so `post_max_size` limits the whole batch and `max_file_uploads` (default `20`) limits how many files arrive at all; both numbers appear on the issue page. | Menu → PHP → **php.ini**: `upload_max_filesize = 8M`, `post_max_size = 16M`, then restart Apache. |
 
 Required extensions are `pdo_mysql`, `mbstring` and — for reliable evidence
 type checks — `fileinfo`; all three are enabled in Laragon by default.
