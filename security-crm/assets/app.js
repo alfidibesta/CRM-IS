@@ -270,17 +270,26 @@
 
     var input = zone.querySelector('input[type=file]');
     var name = doc.getElementById('dropzone-name');
+
+    function bytes(n) {
+      return n > 1048576
+        ? (n / 1048576).toFixed(1) + ' MB'
+        : Math.max(1, Math.round(n / 1024)) + ' KB';
+    }
+
     if (input && name) {
       input.addEventListener('change', function () {
-        if (input.files && input.files[0]) {
-          var f = input.files[0];
-          var size = f.size > 1048576
-            ? (f.size / 1048576).toFixed(1) + ' MB'
-            : Math.max(1, Math.round(f.size / 1024)) + ' KB';
-          name.textContent = f.name + ' · ' + size;
-        } else {
+        var list = input.files ? Array.prototype.slice.call(input.files) : [];
+        if (!list.length) {
           name.textContent = 'No file selected';
+          return;
         }
+        if (list.length === 1) {
+          name.textContent = list[0].name + ' · ' + bytes(list[0].size);
+          return;
+        }
+        var total = list.reduce(function (sum, f) { return sum + f.size; }, 0);
+        name.textContent = list.length + ' files · ' + bytes(total) + ' in total';
       });
     }
   }

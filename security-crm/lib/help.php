@@ -43,7 +43,7 @@ function help_topics(): array
             'summary' => 'The full investigation record: report details, risk, persons involved, evidence, remediation tasks and the activity log.',
             'steps'   => [
                 'Edit "1 · Report details" and "2 · Risk assessment"; severity and risk changes are written to the activity log.',
-                'Upload evidence in "4 · Evidence & attachments" and download any file again from the same list.',
+                'Upload evidence in "4 · Evidence & attachments" — select several files at once and each is stored and listed on its own — then download any file again from the same list.',
                 'Add people in "3 · Persons involved" and tasks in "5 · Remediation tasks" — tasks also appear on the board.',
                 'Persons involved and the evidence list are limited to the investigation roles; an auditor sees a restricted note and exports the report without them.',
                 'Use "Download report (.docx)" for the Word report, and "Report form" to choose or adjust the form it uses.',

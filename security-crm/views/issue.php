@@ -521,11 +521,11 @@ $allTags    = known_tags($pdo);
         <input type="hidden" name="issue_id" value="<?= $id ?>">
 
         <div class="dropzone">
-          <input type="file" name="file" id="evidence-file" required
+          <input type="file" name="files[]" id="evidence-file" required multiple
                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.log,.doc,.docx,.xls,.xlsx,.zip">
           <label for="evidence-file" class="dropzone__label">
-            <strong>Choose a file</strong> or drop it here
-            <span class="muted">pdf, images, txt, csv, log, doc/docx, xls/xlsx, zip · max <?= e(human_size(upload_limit_bytes())) ?></span>
+            <strong>Choose files</strong> or drop them here
+            <span class="muted">pdf, images, txt, csv, log, doc/docx, xls/xlsx, zip · max <?= e(human_size(upload_limit_bytes())) ?> each · several at once</span>
           </label>
           <p class="dropzone__name muted" id="dropzone-name">No file selected</p>
         </div>

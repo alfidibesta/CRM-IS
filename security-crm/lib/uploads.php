@@ -84,6 +84,42 @@ function file_ext(string $name): string
 }
 
 /**
+ * The files in one $_FILES field, one entry per selected file.
+ *
+ * A browser sends `name[]`, `tmp_name[]`, `size[]`, `error[]` and `type[]` for
+ * `<input type="file" name="files[]" multiple>` — the same shape whether one
+ * file was chosen or ten. Slots the browser left empty (no file picked) are
+ * dropped, so the caller only sees real selections; a single-file field is
+ * returned as one entry, so the same loop stores both.
+ *
+ * @return list<array{name: string, type: string, tmp_name: string, error: int, size: int}>
+ */
+function upload_batch(array $field): array
+{
+    $names = $field['name'] ?? null;
+    if (!is_array($names)) {
+        return (int) ($field['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE ? [] : [$field];
+    }
+
+    $files = [];
+    foreach (array_keys($names) as $i) {
+        $one = [
+            'name'     => (string) ($names[$i] ?? ''),
+            'type'     => (string) ($field['type'][$i] ?? ''),
+            'tmp_name' => (string) ($field['tmp_name'][$i] ?? ''),
+            'error'    => (int) ($field['error'][$i] ?? UPLOAD_ERR_NO_FILE),
+            'size'     => (int) ($field['size'][$i] ?? 0),
+        ];
+        if ($one['error'] === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        $files[] = $one;
+    }
+
+    return $files;
+}
+
+/**
  * Validate + store one uploaded file.
  *
  * @param array $file one entry of $_FILES

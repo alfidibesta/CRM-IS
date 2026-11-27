@@ -108,6 +108,25 @@ ck('fill tags', $fill['TAGS'], 'a, b');
 ck('upload limit sane', upload_limit_bytes() > 0 && upload_limit_bytes() <= UPLOAD_MAX_BYTES, true);
 ck('human size', human_size(1048576), '1 MB');
 
+// A multi-file field arrives as parallel arrays; the batch helper turns that
+// into one entry per selected file and drops the slots the browser left empty.
+ck('upload batch: one file in the array shape', upload_batch([
+    'name' => ['a.png'], 'type' => ['image/png'], 'tmp_name' => ['/tmp/pa'],
+    'error' => [UPLOAD_ERR_OK], 'size' => [11],
+]), [['name' => 'a.png', 'type' => 'image/png', 'tmp_name' => '/tmp/pa', 'error' => UPLOAD_ERR_OK, 'size' => 11]]);
+ck('upload batch: two files, one empty slot', array_column(upload_batch([
+    'name' => ['a.png', '', 'b.txt'], 'type' => ['image/png', '', 'text/plain'],
+    'tmp_name' => ['/tmp/pa', '', '/tmp/pb'], 'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE, UPLOAD_ERR_OK],
+    'size' => [11, 0, 22],
+]), 'name'), ['a.png', 'b.txt']);
+ck('upload batch: nothing chosen', upload_batch([
+    'name' => '', 'type' => '', 'tmp_name' => '', 'error' => UPLOAD_ERR_NO_FILE, 'size' => 0,
+]), []);
+ck('upload batch: oversized file kept for store_upload to refuse', upload_batch([
+    'name' => ['big.zip'], 'type' => ['application/zip'], 'tmp_name' => ['/tmp/pz'],
+    'error' => [UPLOAD_ERR_INI_SIZE], 'size' => [0],
+])[0]['error'], UPLOAD_ERR_INI_SIZE);
+
 // Evidence filenames go into a Content-Disposition header, so the helper the
 // Word exports use must leave nothing that can break out of the quoted value.
 ck('safe filename keeps an ordinary name', safe_filename('Gate log 2026.pdf'), 'Gate_log_2026.pdf');

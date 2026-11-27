@@ -539,24 +539,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             back_to('issue', $id);
 
         case 'upload_evidence':
-            $id = (int) ($_POST['issue_id'] ?? 0);
-            $res = store_upload($_FILES['file'] ?? []);
-            if (!$res['ok']) {
-                flash((string) $res['error']);
+            $id   = (int) ($_POST['issue_id'] ?? 0);
+            $kind = in_array($_POST['kind'] ?? '', upload_kinds(), true) ? $_POST['kind'] : 'Document';
+            $note = clamp($_POST['note'] ?? '', 255);
+            // One submit carries a whole selection: every file is validated,
+            // stored, recorded and listed on its own, so one rejected file does
+            // not throw away the rest of the batch.
+            $batch = upload_batch($_FILES['files'] ?? []);
+            if (!$batch) {
+                flash('No file selected.');
                 back_to('issue', $id);
             }
-            $kind = in_array($_POST['kind'] ?? '', upload_kinds(), true) ? $_POST['kind'] : 'Document';
-            $pdo->prepare('INSERT INTO issue_files (issue_id,original_name,stored_name,ext,mime,size_bytes,kind,note,uploaded_by)
-                           VALUES (?,?,?,?,?,?,?,?,?)')
-                ->execute([
+
+            $insert = $pdo->prepare('INSERT INTO issue_files (issue_id,original_name,stored_name,ext,mime,size_bytes,kind,note,uploaded_by)
+                                     VALUES (?,?,?,?,?,?,?,?,?)');
+            $event  = $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)');
+            $saved  = [];
+            $failed = [];
+            foreach ($batch as $one) {
+                $res = store_upload($one);
+                if (!$res['ok']) {
+                    $failed[] = ((string) ($one['name'] ?? '') !== '' ? (string) $one['name'] : 'file')
+                        . ' — ' . $res['error'];
+                    continue;
+                }
+                $insert->execute([
                     $id, $res['name'], $res['stored'], $res['ext'], $res['mime'],
-                    $res['size'], $kind, trim($_POST['note'] ?? ''), $u,
+                    $res['size'], $kind, $note, $u,
                 ]);
-            audit('file.upload', 'file', (int) $pdo->lastInsertId(), (string) $res['name'],
-                $kind . ' · ' . human_size((int) $res['size']) . ' · issue #' . $id);
-            $pdo->prepare('INSERT INTO issue_events (issue_id, actor, kind, message) VALUES (?,?,?,?)')
-                ->execute([$id, $u, 'file', "Evidence uploaded: {$res['name']} ({$kind})."]);
-            flash("Evidence uploaded: {$res['name']}.");
+                audit('file.upload', 'file', (int) $pdo->lastInsertId(), (string) $res['name'],
+                    $kind . ' · ' . human_size((int) $res['size']) . ' · issue #' . $id);
+                $event->execute([$id, $u, 'file', "Evidence uploaded: {$res['name']} ({$kind})."]);
+                $saved[] = (string) $res['name'];
+            }
+
+            $said = [];
+            if ($saved) {
+                $said[] = count($saved) === 1
+                    ? 'Evidence uploaded: ' . $saved[0] . '.'
+                    : count($saved) . ' evidence files uploaded.';
+            }
+            if ($failed) {
+                $said[] = count($failed) . ' not uploaded: ' . implode('; ', array_slice($failed, 0, 3))
+                    . (count($failed) > 3 ? ' …' : '');
+            }
+            flash($said ? implode(' ', $said) : 'No file selected.');
             back_to('issue', $id);
 
         case 'delete_file':
