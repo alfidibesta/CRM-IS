@@ -648,12 +648,125 @@ up: a deletion that happens after the last anchor is only named once the trail i
 Re-sealing is deliberately not offered: an existing hash is never rewritten, so a tampered chain
 stays tampered.
 
+## Backups and restore
+
+The database holds the register, the controlled documents and the hash-chained trail; `uploads/`
+holds the evidence files. Nothing in the app schedules a copy of either, and a backup you have
+never restored is a hope rather than a control (ISO 27001 A.8.13). One command plus one quarterly
+drill closes that gap.
+
+### Take a backup
+
+```bash
+php tools/backup.php
+```
+
+```
+dump      backups/secops-crm-20261127-123535.sql.gz
+size      32.1 KB (gzip)
+sha256    efffdb199c296925fd536054e1e2fdf1f7e160973f0b39adec2157d338f9d2ae
+tables    17 · 386 rows
+audit     head #133 of 133 entries · 9a7c01dc9ed0…
+manifest  backups/secops-crm-20261127-123535.json
+restore   scratch database + SECOPS_DB_NAME=<scratch> php tests/verify-audit.php
+```
+
+It reads the connection from `config.php` (or the `SECOPS_DB_*` variables), connects **read-only**
+— no `migrate()`, no seeding, so a backup cannot change the database it copies — and writes two
+files into `backups/`:
+
+- **`secops-crm-<date>-<time>.sql.gz`** — a `--single-transaction` dump, consistent even while
+  people are using the app, which is also what keeps the audit chain inside it valid.
+- **`secops-crm-<date>-<time>.json`** — the manifest: sha256, size, per-table row counts, and the
+  trail's newest id and hash. This is what you compare against after a restore.
+
+The dump is kept only when mysqldump wrote its own `-- Dump completed` line, so a full disk or a
+killed server fails loudly instead of leaving a plausible half file. `--keep=30` prunes to the
+newest 30, `--out=D:\backups\secops` writes elsewhere, `--help` lists both.
+
+It needs `mysqldump` or `mariadb-dump`; when it is not on `PATH`, name it once:
+
+```bat
+set SECOPS_MYSQLDUMP=C:\laragon\bin\mysql\mysql-8.0.30-winx64\bin\mysqldump.exe
+php tools\backup.php
+```
+
+Daily, from cron (or Task Scheduler):
+
+```bash
+0 2 * * * cd /var/www/security-crm && php tools/backup.php --keep=30
+```
+
+Evidence files are **not** inside the dump — copy them with it:
+
+```bash
+tar -czf backups/uploads-$(date +%F).tar.gz uploads
+```
+
+### Restore drill
+
+Do this once a quarter and before any upgrade. A restore you have never run is the part that
+fails.
+
+**1. Restore into a scratch database** — never over the live one:
+
+```bash
+mysql -u root -p -e "DROP DATABASE IF EXISTS security_crm_restore_check; CREATE DATABASE security_crm_restore_check CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+gunzip -c backups/secops-crm-20261127-123535.sql.gz | mysql -u root -p security_crm_restore_check
+```
+
+**2. Walk the chain in the copy**, with a throwaway anchor file:
+
+```bash
+SECOPS_DB_NAME=security_crm_restore_check SECOPS_AUDIT_ANCHOR=/tmp/restore-drill-anchors.log \
+  php tests/verify-audit.php
+# audit trail: 133 entries, chain intact (ids 1–133)
+# audit anchor: none recorded yet
+# audit anchor: appended id 133 to /tmp/restore-drill-anchors.log
+```
+
+The separate `SECOPS_AUDIT_ANCHOR` matters: a drill must never judge, or advance, the anchor the
+live installation relies on. `--no-anchor` alone is not enough, because the verifier would still
+compare the restored copy with the live anchor and call an older (perfectly good) backup
+"restored from an older copy".
+
+**3. Compare with the manifest.** The printed `ids 1–N` must equal `audit.head_id`, and a count
+or two should match `database.row_counts`:
+
+```sql
+SELECT COUNT(*) FROM security_crm_restore_check.issues;   -- 12 in the manifest above
+SELECT COUNT(*) FROM security_crm_restore_check.audit_log; -- 133
+```
+
+**4. Drop the scratch database.**
+
+```sql
+DROP DATABASE security_crm_restore_check;
+```
+
+Reading the result:
+
+- **`chain intact` with matching counts** — the dump is complete and restorable. That is the
+  pass condition.
+- **a broken link inside the copy** — the dump was cut short, or someone edited `audit_log` by
+  hand before it was taken. Take a fresh dump and investigate the live trail.
+- **a head id lower than the manifest** — you restored an older dump. Normal for last week's
+  backup, not for the one you just took.
+
+The real restore is the same thing pointed at the live database: stop the app, restore the dump,
+put the matching `uploads/` files back, then run `php tests/verify-audit.php` once. If the copy is
+older than the last anchor, it answers `audit anchor: BROKEN … the database was restored from an
+older copy` — that is the anchor working as designed, and the entry it names is the first one the
+restore dropped. Keep the anchor file on a different backup from the database, as *Tamper
+evidence* says above.
+
 ## Known limitations
 
 - **One plant, one database.** There is no tenant or site switch; a second plant
   needs a second copy and database.
 - **Files live on local disk.** Evidence and `logs/app.log` are not replicated;
-  include `security-crm/uploads/` and the database in the same backup.
+  include `security-crm/uploads/` and the database in the same backup
+  (`tools/backup.php` covers the database half).
 - **Search is SQL `LIKE`.** Fine for a few thousand rows, not a search engine.
 - **Exports are `.docx` only.** PDF would need an external converter.
 - **No email.** Alerts are in-app; nothing leaves the server.

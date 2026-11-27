@@ -1,5 +1,5 @@
 # Local runtime (PHP + MariaDB binaries and their data dir) — reinstall per README
-tools/
+/tools/
 
 # Uploaded evidence: keep the folder, not the files
 security-crm/uploads/*
@@ -7,7 +7,9 @@ security-crm/uploads/*
 
 # Local secrets, logs and dumps
 security-crm/config.local.php
+security-crm/backups/
 *.log
+*.sql
 *.sql.gz
 
 .DS_Store
