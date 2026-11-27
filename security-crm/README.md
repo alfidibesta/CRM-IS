@@ -687,7 +687,7 @@ sha256    efffdb199c296925fd536054e1e2fdf1f7e160973f0b39adec2157d338f9d2ae
 tables    17 · 386 rows
 audit     head #133 of 133 entries · 9a7c01dc9ed0…
 manifest  backups/secops-crm-20261127-123535.json
-uploads   12 file(s), 1.8 MB · tree 4a91c2d0e8f1…
+uploads   12 file(s), 1.8 MB
 restore   scratch database + SECOPS_DB_NAME=<scratch> php tests/verify-audit.php
 check     php tools/backup.php --check=backups/secops-crm-20261127-123535.json
 ```
@@ -700,8 +700,8 @@ files into `backups/`:
   people are using the app, which is also what keeps the audit chain inside it valid.
 - **`secops-crm-<date>-<time>.json`** — the manifest: sha256, size, per-table row counts, the
   trail's newest id and hash, and an `uploads` section listing every evidence file with its
-  relative path, size, modification time and sha256 (plus a tree hash for the folder). This is
-  what you compare against after a restore.
+  relative path, size, modification time and sha256. This is what you compare against after a
+  restore.
 
 The dump is kept only when mysqldump wrote its own `-- Dump completed` line, so a full disk or a
 killed server fails loudly instead of leaving a plausible half file. `--keep=30` prunes to the
@@ -722,16 +722,17 @@ Daily, from cron (or Task Scheduler):
 ```
 
 Evidence files are **not** inside the dump. The manifest lists every one of them — relative path,
-size, modification time and sha256 — and a tree hash for the folder, so a restored copy can be
-checked rather than assumed. Copy them with the dump:
+size, modification time and sha256 — so a restored copy can be checked rather than assumed. Copy
+them with the dump and put them back into the app's `uploads/`:
 
 ```bash
 tar -czf backups/uploads-$(date +%F).tar.gz uploads
 ```
 
 `php tools/backup.php --check=backups/secops-crm-…json` re-hashes the dump and every file under
-`uploads/` and names what is missing, changed or extra. It needs no database connection and exits
-0 only when both halves match the manifest.
+the app's `uploads/` and names what is missing, changed or extra. It needs no database connection
+and exits 0 only when both halves match the manifest. It prints the folder it read, because a copy
+left beside the dump instead of in the app does not count.
 
 ### Restore drill
 
@@ -767,7 +768,8 @@ app at it) and run the manifest check — it reads the dump beside the manifest 
 ```bash
 php tools/backup.php --check=backups/secops-crm-20261127-123535.json
 # dump      sha256 matches · 32.1 KB
-# uploads   12 expected · 12 present · 0 missing · 0 changed · 0 extra
+# uploads   /var/www/security-crm/uploads
+#           12 expected · 12 present · 0 missing · 0 changed · 0 extra
 # result    OK — the dump and every evidence file match the manifest
 ```
 

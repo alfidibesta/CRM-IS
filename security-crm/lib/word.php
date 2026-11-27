@@ -304,7 +304,9 @@ function docx_package(array $blocks, array $fill = [], array $props = []): strin
  * Only ASCII letters, digits, dot, dash and underscore survive, so a name a
  * user typed can never break out of the quoted Content-Disposition value or
  * hide a file behind a leading dot. Leading and trailing dots/dashes are
- * trimmed; when nothing usable remains the fallback is used instead.
+ * trimmed; when nothing usable remains the fallback is used instead. A name
+ * that is not Latin script collapses to underscores, so it saves under the
+ * fallback rather than as the (unreadable) original.
  */
 function safe_filename(string $name, string $fallback = 'document'): string
 {
@@ -318,10 +320,10 @@ function safe_filename(string $name, string $fallback = 'document'): string
 /** Stream a .docx to the browser and stop. */
 function docx_send(string $filename, string $bytes): void
 {
-    $safe = safe_filename($filename, 'document.docx');
-    if (strtolower((string) pathinfo($safe, PATHINFO_EXTENSION)) !== 'docx') {
-        $safe = safe_filename((string) pathinfo($safe, PATHINFO_FILENAME), 'document') . '.docx';
-    }
+    // The served file is always a .docx, so the extension is replaced rather
+    // than trusted. Sanitizing the stem (not the whole name) keeps a name whose
+    // characters all collapse — 名前.docx — as document.docx, not docx.docx.
+    $safe = safe_filename((string) pathinfo($filename, PATHINFO_FILENAME), 'document') . '.docx';
     header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     header('Content-Disposition: attachment; filename="' . $safe . '"');
     header('Content-Length: ' . strlen($bytes));

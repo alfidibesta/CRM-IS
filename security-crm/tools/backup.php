@@ -20,10 +20,14 @@ declare(strict_types=1);
  * so a full disk or a killed server never leaves a plausible-looking half file.
  *
  * The evidence files are not inside the dump, so the manifest lists every one
- * of them under uploads/ with its own sha256 and a tree hash. Copy the folder
- * beside the dump, then after a restore check both halves with
+ * of them under uploads/ with its own sha256. Copy the folder with the dump,
+ * put it back into the restored app's uploads/, then check both halves with
  *
  *   php tools/backup.php --check=backups/secops-crm-YYYYmmdd-HHMMSS.json
+ *
+ * --check reads the dump beside the manifest and the app's own uploads/ folder
+ * (never the database) and prints which folder it judged, so a copy left
+ * somewhere else cannot pass the drill by accident.
  *
  * Exit 0 = dump written and manifest complete, 1 = nothing usable was written.
  */
@@ -172,69 +176,80 @@ function bk_check(string $manifestPath, string $appRoot): void
     $problems = 0;
     echo 'manifest  ' . $manifestPath . PHP_EOL;
 
+    // A manifest may be edited by hand or carried in from elsewhere, so the
+    // dump name is reduced to a bare file name: --check never reads a path out
+    // of the manifest, only a file beside it.
     $dump     = is_array($m['dump'] ?? null) ? $m['dump'] : [];
-    $dumpFile = dirname($manifestPath) . '/' . (string) ($dump['file'] ?? '');
-    if (($dump['file'] ?? '') === '' || !is_file($dumpFile)) {
-        echo 'dump      MISSING ' . basename($dumpFile) . PHP_EOL;
+    $dumpName = basename((string) ($dump['file'] ?? ''));
+    $dumpFile = dirname($manifestPath) . '/' . $dumpName;
+    // Manifests from this version record the hash and size of the written file
+    // and keep the uncompressed count in sql_bytes; older ones hashed the SQL
+    // stream, which cannot be compared with the file on disk.
+    $fileHashed = isset($dump['sql_bytes']);
+
+    if ($dumpName === '' || !is_file($dumpFile)) {
+        echo 'dump      MISSING ' . ($dumpName !== '' ? $dumpName : '(no file recorded)') . PHP_EOL;
         $problems++;
-    } elseif (!isset($dump['sql_bytes'])) {
-        // Older manifests hashed the SQL stream, not the written file.
-        echo 'dump      file sha256 not recorded in this manifest (older backup) — skipped' . PHP_EOL;
+    } elseif (!$fileHashed) {
+        echo 'dump      this older manifest hashed the SQL stream, not the file — skipped' . PHP_EOL;
     } elseif (!hash_equals((string) ($dump['sha256'] ?? ''), (string) hash_file('sha256', $dumpFile))) {
-        echo 'dump      sha256 DOES NOT MATCH ' . basename($dumpFile) . PHP_EOL;
+        echo 'dump      sha256 DOES NOT MATCH ' . $dumpName . PHP_EOL;
         $problems++;
     } else {
         echo 'dump      sha256 matches · ' . bk_bytes((int) filesize($dumpFile)) . PHP_EOL;
     }
 
-    $hasInventory = is_array($m['uploads']['inventory'] ?? null);
-    $expected = [];
-    foreach (($m['uploads']['inventory'] ?? []) as $rel => $info) {
-        if (is_string($rel) && is_array($info) && isset($info['sha256'])) {
-            $expected[$rel] = (string) $info['sha256'];
+    $inventory = is_array($m['uploads']['inventory'] ?? null) ? $m['uploads']['inventory'] : null;
+    if ($inventory === null) {
+        // Older backups did not list the folder. A manifest from this version
+        // that has lost its inventory is a different thing and must not pass.
+        if ($fileHashed) {
+            echo 'uploads   NO INVENTORY in a manifest that should carry one' . PHP_EOL;
+            $problems++;
+        } else {
+            echo 'uploads   not recorded in this older manifest — skipped' . PHP_EOL;
+        }
+    } else {
+        $expected = [];
+        foreach ($inventory as $rel => $info) {
+            if (is_string($rel) && is_array($info) && isset($info['sha256'])) {
+                $expected[$rel] = (string) $info['sha256'];
+            }
+        }
+
+        $dir     = $appRoot . '/uploads';
+        $actual  = uploads_inventory($dir);
+        $missing = array_diff_key($expected, $actual);
+        $extra   = array_diff_key($actual, $expected);
+        $changed = [];
+        foreach (array_intersect_key($expected, $actual) as $rel => $want) {
+            if (!hash_equals($want, (string) $actual[$rel]['sha256'])) {
+                $changed[] = (string) $rel;
+            }
+        }
+
+        echo 'uploads   ' . $dir . PHP_EOL;
+        echo '          ' . count($expected) . ' expected · ' . count($actual) . ' present · '
+            . count($missing) . ' missing · ' . count($changed) . ' changed · ' . count($extra) . ' extra' . PHP_EOL;
+
+        foreach (array_slice(array_keys($missing), 0, 5) as $rel) {
+            echo '          missing ' . $rel . PHP_EOL;
+        }
+        foreach (array_slice($changed, 0, 5) as $rel) {
+            echo '          changed ' . $rel . PHP_EOL;
+        }
+        foreach (array_slice(array_keys($extra), 0, 5) as $rel) {
+            echo '          extra   ' . $rel . PHP_EOL;
+        }
+
+        if ($missing || $changed || $extra) {
+            $problems++;
         }
     }
 
-    if (!$hasInventory) {
-        // Manifests written before uploads were listed cannot judge the
-        // folder; say so instead of calling every file an extra.
-        echo 'uploads   not recorded in this manifest (older backup) — skipped' . PHP_EOL;
-        echo $problems === 0
-            ? 'result    OK — the dump matches the manifest' . PHP_EOL
-            : 'result    ' . $problems . ' problem group(s) — the restore is not the backup' . PHP_EOL;
-        exit($problems === 0 ? 0 : 1);
-    }
-
-    $actual  = uploads_inventory($appRoot . '/uploads');
-    $missing = array_diff_key($expected, $actual);
-    $extra   = array_diff_key($actual, $expected);
-    $changed = [];
-    foreach (array_intersect_key($expected, $actual) as $rel => $want) {
-        if (!hash_equals($want, (string) $actual[$rel]['sha256'])) {
-            $changed[] = (string) $rel;
-        }
-    }
-
-    echo 'uploads   ' . count($expected) . ' expected · ' . count($actual) . ' present · '
-        . count($missing) . ' missing · ' . count($changed) . ' changed · ' . count($extra) . ' extra' . PHP_EOL;
-
-    foreach (array_slice(array_keys($missing), 0, 5) as $rel) {
-        echo '          missing ' . $rel . PHP_EOL;
-    }
-    foreach (array_slice($changed, 0, 5) as $rel) {
-        echo '          changed ' . $rel . PHP_EOL;
-    }
-    foreach (array_slice(array_keys($extra), 0, 5) as $rel) {
-        echo '          extra   ' . $rel . PHP_EOL;
-    }
-
-    if ($missing || $changed || $extra) {
-        $problems++;
-    }
-
-    echo $problems === 0
-        ? 'result    OK — the dump and every evidence file match the manifest' . PHP_EOL
-        : 'result    ' . $problems . ' problem group(s) — the restore is not the backup' . PHP_EOL;
+    echo 'result    ' . ($problems === 0
+        ? 'OK — the dump' . ($inventory !== null ? ' and every evidence file match' : ' matches') . ' the manifest'
+        : $problems . ' problem group(s) — the restore is not the backup') . PHP_EOL;
 
     exit($problems === 0 ? 0 : 1);
 }
@@ -415,17 +430,11 @@ try {
 }
 
 $uploadsInventory = uploads_inventory($appRoot . '/uploads');
-$uploadsBytes     = 0;
-$uploadTree       = [];
-foreach ($uploadsInventory as $rel => $info) {
-    $uploadsBytes += (int) $info['bytes'];
-    $uploadTree[] = $rel . ' ' . $info['sha256'];
-}
+$uploadsBytes     = array_sum(array_column($uploadsInventory, 'bytes'));
 $uploads = [
     'folder'    => 'uploads',
     'files'     => count($uploadsInventory),
-    'bytes'     => $uploadsBytes,
-    'sha256'    => $uploadTree ? hash('sha256', implode("\n", $uploadTree)) : '',
+    'bytes'     => (int) $uploadsBytes,
     'inventory' => $uploadsInventory,
 ];
 
@@ -486,10 +495,9 @@ echo 'audit     ' . ($audit['head_id'] > 0
 echo 'manifest  ' . $rel($manifestPath) . PHP_EOL;
 
 if ($uploads['files'] > 0) {
-    echo 'uploads   ' . $uploads['files'] . ' file(s), ' . bk_bytes($uploads['bytes'])
-        . ' · tree ' . substr($uploads['sha256'], 0, 12) . '…' . PHP_EOL;
+    echo 'uploads   ' . $uploads['files'] . ' file(s), ' . bk_bytes($uploads['bytes']) . PHP_EOL;
     echo '          every file is listed with its sha256 in the manifest; copy uploads/'
-        . ' beside the dump' . PHP_EOL;
+        . ' with the dump' . PHP_EOL;
 }
 
 echo 'restore   scratch database + SECOPS_DB_NAME=<scratch> php tests/verify-audit.php'
