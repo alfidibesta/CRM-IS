@@ -29,7 +29,15 @@ declare(strict_types=1);
  * (never the database) and prints which folder it judged, so a copy left
  * somewhere else cannot pass the drill by accident.
  *
- * Exit 0 = dump written and manifest complete, 1 = nothing usable was written.
+ * A manifest cannot protect itself: whoever can edit it can rewrite its hashes
+ * and row counts, so a doctored backup would pass a check that only reads the
+ * manifest. Each run therefore appends one line to the audit trail's anchor
+ * file (logs/audit-anchors.log, or SECOPS_AUDIT_ANCHOR) holding the manifest's
+ * own sha256 and the trail head at that moment. --check compares the manifest
+ * with that line, so the copy has to be the one this installation wrote — and
+ * the record sits outside the app folder when the anchor file is kept there.
+ *
+ * Exit 0 = dump written, manifest complete and recorded, 1 = otherwise.
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -41,6 +49,7 @@ const BACKUP_PREFIX = 'secops-crm-';
 
 $appRoot = dirname(__DIR__);
 require $appRoot . '/lib/uploads.php';   // uploads_inventory() for the manifest
+require $appRoot . '/lib/audit.php';     // audit_backup_anchor_*() for the record
 
 /** Human file size. */
 function bk_bytes(int $bytes): string
@@ -61,7 +70,8 @@ function bk_usage(): void
     echo 'Usage: php tools/backup.php [--out=DIR] [--keep=N]' . PHP_EOL . PHP_EOL;
     echo '  --out=DIR   write the dump here (default: security-crm/backups)' . PHP_EOL;
     echo '  --keep=N    keep only the newest N dumps in that folder' . PHP_EOL;
-    echo '  --check=FILE verify a dump and uploads/ against its manifest, then exit' . PHP_EOL;
+    echo '  --check=FILE verify a dump and uploads/ against the manifest and its' . PHP_EOL;
+    echo '              anchor record, then exit' . PHP_EOL;
     echo '  --help      this text' . PHP_EOL . PHP_EOL;
     echo 'Set SECOPS_MYSQLDUMP when mysqldump is not on PATH, for example' . PHP_EOL;
     echo 'C:\laragon\bin\mysql\mysql-8.0.30-winx64\bin\mysqldump.exe' . PHP_EOL;
@@ -175,6 +185,25 @@ function bk_check(string $manifestPath, string $appRoot): void
 
     $problems = 0;
     echo 'manifest  ' . $manifestPath . PHP_EOL;
+
+    // The manifest carries its own hashes, so the only way to tell a backup
+    // this installation wrote from one edited later is the record written to
+    // the anchor file at the time. No record means no proof, which is not a
+    // pass: a manifest that was swapped for another has no record either.
+    $record = audit_backup_anchor_find($manifestPath);
+    if ($record === null) {
+        echo 'anchor    NO RECORD in ' . audit_anchor_file()
+            . ' — this manifest cannot be tied to the trail' . PHP_EOL;
+        echo '          (it predates the record, or it was replaced; only a recorded backup passes)' . PHP_EOL;
+        $problems++;
+    } elseif (!hash_equals($record['sha256'], (string) hash_file('sha256', $manifestPath))) {
+        echo 'anchor    sha256 DOES NOT MATCH the record from ' . $record['at'] . PHP_EOL;
+        echo '          the manifest changed after it was written' . PHP_EOL;
+        $problems++;
+    } else {
+        echo 'anchor    sha256 matches the record from ' . $record['at']
+            . ' in ' . $record['file'] . PHP_EOL;
+    }
 
     // A manifest may be edited by hand or carried in from elsewhere, so the
     // dump name is reduced to a bare file name: --check never reads a path out
@@ -476,6 +505,15 @@ if ($written === false) {
 }
 @chmod($manifestPath, 0600);
 
+// The record is what makes --check able to tell this manifest from an edited
+// one, so a backup without it is not a verified backup: say so and fail.
+$record = audit_backup_anchor_write($pdo, $manifestPath);
+if (!$record['ok']) {
+    bk_fail('the dump and manifest are at ' . $final . ', but the anchor record could not be written ('
+        . (string) ($record['error'] ?? 'unknown error') . ') — --check will refuse this backup. '
+        . 'Fix the anchor path (SECOPS_AUDIT_ANCHOR) and take the backup again.');
+}
+
 // ------------------------------------------------------------------- report
 
 $rel = static function (string $path) use ($appRoot): string {
@@ -493,6 +531,7 @@ echo 'audit     ' . ($audit['head_id'] > 0
         : 'no sealed entries yet')
     . PHP_EOL;
 echo 'manifest  ' . $rel($manifestPath) . PHP_EOL;
+echo 'anchor    manifest sha256 recorded in ' . $rel((string) $record['file']) . PHP_EOL;
 
 if ($uploads['files'] > 0) {
     echo 'uploads   ' . $uploads['files'] . ' file(s), ' . bk_bytes($uploads['bytes']) . PHP_EOL;

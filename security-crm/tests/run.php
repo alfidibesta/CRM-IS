@@ -245,6 +245,35 @@ ck('anchor reports its file', $lastAnchor['file'], $anchorFile);
 @unlink($anchorFile);
 ck('anchor missing file is null', audit_anchor_last($anchorFile), null);
 
+/* ------------------------------------------ backup records in the anchor */
+$bkSha  = str_repeat('ab', 32);
+$bkName = 'secops-crm-20261127-123535.json';
+$bkLine = audit_backup_anchor_line($bkName, $bkSha,
+    ['id' => 154, 'row_hash' => $anchorRow['row_hash']], '2026-11-27T12:35:41+00:00');
+$bk = audit_backup_anchor_parse($bkLine);
+ck('backup record round-trips', [$bk['id'], $bk['head'], $bk['sha256'], $bk['name']],
+    [154, $anchorRow['row_hash'], $bkSha, $bkName]);
+ck('backup record needs six fields', audit_backup_anchor_parse(str_replace("\t", ' ', $bkLine)), null);
+ck('backup record rejects a short manifest hash', audit_backup_anchor_parse(
+    "backup\t2026-11-27T12:35:41+00:00\t154\t{" . $anchorRow['row_hash'] . "}\tbeef\t" . $bkName), null);
+ck('backup record is not a chain anchor', audit_anchor_parse($bkLine), null);
+
+$bkFile = sys_get_temp_dir() . '/secops-bk-anchor-' . bin2hex(random_bytes(4)) . '.log';
+file_put_contents($bkFile,
+    audit_anchor_line($chain[0], 2, '2026-11-21T09:00:00+00:00') . "\n"
+    . audit_backup_anchor_line('a.json', str_repeat('0', 64), [], '2026-11-26T02:00:00+00:00') . "\n"
+    . audit_backup_anchor_line('b.json', $bkSha, [], '2026-11-27T02:00:00+00:00') . "\n"
+    . audit_backup_anchor_line('a.json', str_repeat('1', 64), [], '2026-11-27T03:00:00+00:00') . "\n");
+ck('backup record finds the newest line for a name',
+    audit_backup_anchor_find('a.json', $bkFile)['sha256'], str_repeat('1', 64));
+ck('backup record reads a second name', audit_backup_anchor_find('b.json', $bkFile)['sha256'], $bkSha);
+ck('backup record: unknown name', audit_backup_anchor_find('c.json', $bkFile), null);
+ck('backup record matches on the bare file name',
+    audit_backup_anchor_find('/tmp/a.json', $bkFile)['name'], 'a.json');
+ck('chain anchor ignores backup records', audit_anchor_last($bkFile)['id'], (int) $chain[0]['id']);
+@unlink($bkFile);
+ck('backup record: missing file', audit_backup_anchor_find('a.json', $bkFile), null);
+
 /* ------------------------------------------ shared chain / anchor wording */
 ck('chain state: intact', audit_chain_state($whole)['state'], 'ok');
 ck('chain state: empty', audit_chain_state(['ok' => true, 'checked' => 0])['state'], 'empty');

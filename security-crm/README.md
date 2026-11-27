@@ -687,6 +687,7 @@ sha256    efffdb199c296925fd536054e1e2fdf1f7e160973f0b39adec2157d338f9d2ae
 tables    17 · 386 rows
 audit     head #133 of 133 entries · 9a7c01dc9ed0…
 manifest  backups/secops-crm-20261127-123535.json
+anchor    manifest sha256 recorded in logs/audit-anchors.log
 uploads   12 file(s), 1.8 MB
 restore   scratch database + SECOPS_DB_NAME=<scratch> php tests/verify-audit.php
 check     php tools/backup.php --check=backups/secops-crm-20261127-123535.json
@@ -702,6 +703,18 @@ files into `backups/`:
   trail's newest id and hash, and an `uploads` section listing every evidence file with its
   relative path, size, modification time and sha256. This is what you compare against after a
   restore.
+
+The manifest is not trusted on its own: whoever can edit it can rewrite its hashes. So every run
+appends one line to the audit trail's anchor file — `logs/audit-anchors.log`, or
+`SECOPS_AUDIT_ANCHOR` — with the trail head and the manifest's own sha256, and `--check` compares
+the manifest it is given with that line. A manifest edited after the fact, or swapped for another,
+no longer matches the record and cannot pass. Because the record lives outside the database, the
+anchor file is as much part of the backup as the dump: keep it on a different disk or share, as
+*Tamper evidence* describes, and keep it longer than the dumps (`--keep` prunes manifests, never the
+record file).
+
+A backup taken before this record existed has none, so `--check` reports `NO RECORD` and exits 1 —
+the copy still matches its manifest, but nothing proves the manifest is the one that was written.
 
 The dump is kept only when mysqldump wrote its own `-- Dump completed` line, so a full disk or a
 killed server fails loudly instead of leaving a plausible half file. `--keep=30` prunes to the
@@ -730,9 +743,14 @@ tar -czf backups/uploads-$(date +%F).tar.gz uploads
 ```
 
 `php tools/backup.php --check=backups/secops-crm-…json` re-hashes the dump and every file under
-the app's `uploads/` and names what is missing, changed or extra. It needs no database connection
-and exits 0 only when both halves match the manifest. It prints the folder it read, because a copy
-left beside the dump instead of in the app does not count.
+the app's `uploads/`, compares the manifest with its anchor record, and names what is missing,
+changed or extra. It needs no database connection and exits 0 only when all three agree. It prints
+the folder it read, because a copy left beside the dump instead of in the app does not count.
+
+What that proves: the dump, the evidence folder and the manifest are the ones recorded at
+12:35:35 on the day of the backup. What it cannot prove: that the anchor file itself was not
+touched — that is the job of keeping it somewhere the app's own account cannot write, and of
+`tests/verify-audit.php`, which reports a trail edited to match a doctored record.
 
 ### Restore drill
 
@@ -767,6 +785,7 @@ app at it) and run the manifest check — it reads the dump beside the manifest 
 
 ```bash
 php tools/backup.php --check=backups/secops-crm-20261127-123535.json
+# anchor    sha256 matches the record from 2026-11-27T12:35:41+00:00 in /var/backups/anchor/audit-anchors.log
 # dump      sha256 matches · 32.1 KB
 # uploads   /var/www/security-crm/uploads
 #           12 expected · 12 present · 0 missing · 0 changed · 0 extra

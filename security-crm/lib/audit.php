@@ -628,6 +628,118 @@ function audit_anchor_write(PDO $pdo, int $checked, ?string $file = null): array
     return ['ok' => true, 'file' => $file, 'id' => (int) $row['id']];
 }
 
+/* ------------------------------------------------------ backup records */
+
+/**
+ * Backups are recorded in the same anchor file as the chain heads.
+ *
+ * A manifest on its own proves nothing: whoever can edit it can rewrite its
+ * hashes, its row counts and its uploads inventory. So each run appends one
+ * line here naming the manifest it wrote, that manifest's own sha256 and the
+ * trail head at the moment it was written. backup.php --check compares the
+ * manifest it is given with the newest line for that name, which lives outside
+ * the database (and, with SECOPS_AUDIT_ANCHOR, outside the app folder) — an
+ * edited manifest no longer hashes to what was recorded.
+ *
+ *   backup <TAB> at <TAB> head id <TAB> head hash <TAB> manifest sha256 <TAB> manifest name
+ *
+ * Six fields, so audit_anchor_parse() ignores these lines and the four-field
+ * chain anchor format is untouched.
+ */
+function audit_backup_anchor_line(string $name, string $sha256, array $head = [], ?string $at = null): string
+{
+    return 'backup' . "\t" . ($at ?? date('c'))
+        . "\t" . (int) ($head['id'] ?? 0)
+        . "\t" . strtolower((string) ($head['row_hash'] ?? ''))
+        . "\t" . strtolower($sha256)
+        . "\t" . $name;
+}
+
+/** Parse one backup record; null when the line is not one. */
+function audit_backup_anchor_parse(string $line): ?array
+{
+    $parts = explode("\t", rtrim($line, "\r\n"));
+    if (count($parts) !== 6 || $parts[0] !== 'backup') {
+        return null;
+    }
+    [, $at, $id, $head, $sha, $name] = $parts;
+    if ($name === '' || $at === '' || !ctype_digit($id)
+        || strlen($sha) !== 64 || !ctype_xdigit($sha)) {
+        return null;
+    }
+    if ($head !== '' && (strlen($head) !== 64 || !ctype_xdigit($head))) {
+        return null;
+    }
+
+    return ['at' => $at, 'id' => (int) $id, 'head' => strtolower($head),
+            'sha256' => strtolower($sha), 'name' => $name];
+}
+
+/**
+ * The newest backup record for a manifest name, or null when there is none.
+ *
+ * The anchor file also holds chain anchors, which are skipped here; every
+ * other kind of line is ignored too, so a hand edit cannot inject a record.
+ */
+function audit_backup_anchor_find(string $name, ?string $file = null): ?array
+{
+    $file = audit_anchor_file($file);
+    if (!is_file($file) || !is_readable($file)) {
+        return null;
+    }
+
+    $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if (!$lines) {
+        return null;
+    }
+
+    $name = basename($name);
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        $record = audit_backup_anchor_parse((string) $lines[$i]);
+        if ($record !== null && $record['name'] === $name) {
+            return $record + ['file' => $file];
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Append a record for the manifest just written.
+ *
+ * @return array{ok: bool, file?: string, sha256?: string, error?: string}
+ */
+function audit_backup_anchor_write(PDO $pdo, string $manifestPath, ?string $file = null): array
+{
+    $file = audit_anchor_file($file);
+    $sha  = @hash_file('sha256', $manifestPath);
+    if (!is_string($sha) || strlen($sha) !== 64) {
+        return ['ok' => false, 'error' => 'cannot hash ' . $manifestPath, 'file' => $file];
+    }
+
+    $head = [];
+    try {
+        $row = $pdo->query('SELECT id, row_hash FROM audit_log ORDER BY id DESC LIMIT 1')->fetch();
+        if ($row) {
+            $head = ['id' => (int) $row['id'], 'row_hash' => (string) $row['row_hash']];
+        }
+    } catch (Throwable) {
+        // An unsealed trail is recorded as id 0 with no hash.
+    }
+
+    $dir = dirname($file);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+        return ['ok' => false, 'error' => 'cannot create ' . $dir, 'file' => $file];
+    }
+
+    $line = audit_backup_anchor_line(basename($manifestPath), $sha, $head) . PHP_EOL;
+    if (@file_put_contents($file, $line, FILE_APPEND | LOCK_EX) === false) {
+        return ['ok' => false, 'error' => 'cannot append to ' . $file, 'file' => $file];
+    }
+
+    return ['ok' => true, 'file' => $file, 'sha256' => $sha];
+}
+
 /**
  * Seal entries that carry no hash yet, in id order.
  *
