@@ -115,7 +115,7 @@ auth_boot($pdo);
 audit_boot($pdo);
 notify_boot($pdo);
 
-$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'ot', 'users', 'audit', 'logs', 'notifications', 'download', 'doc', 'issue_doc'];
+$pages = ['login', 'dashboard', 'sop', 'workflow', 'issues', 'issue', 'templates', 'template', 'exceptions', 'ot', 'users', 'audit', 'health', 'logs', 'notifications', 'download', 'doc', 'issue_doc'];
 
 /** POST target: ?page=X ( + id ) — validated against the page whitelist. */
 function back_to(string $back, int $id = 0): void
@@ -1436,6 +1436,7 @@ $titles = [
     'logs'      => ['System Log', 'Uncaught errors written by the application'],
     'users'     => ['Users & Authority', 'Accounts, roles and the permission matrix'],
     'audit'     => ['Audit Trail', 'Every recorded change, who made it and from where'],
+    'health'    => ['System Self-Check', 'Hash chain, storage, schema and the last backup'],
     'notifications' => ['Notifications', 'Alerts for your issues, exceptions and document reviews'],
 ];
 

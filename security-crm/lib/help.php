@@ -126,10 +126,23 @@ function help_topics(): array
             'summary' => 'Every recorded action, with who did it, from where and what changed — the evidence trail for ISO 27001.',
             'steps'   => [
                 'Combine the free-text search with the action, record type, actor and date filters, then "Apply filters".',
+                '"Verify integrity" re-walks the whole hash chain and names the first entry that no longer matches; it writes nothing, so the trail you audit stays exactly as it was.',
                 '"Export CSV" downloads the filtered trail (up to 5,000 rows) for an auditor.',
                 '"Newer" and "Older" page through the trail; the newest entry is always first.',
             ],
-            'tip' => 'Each entry carries the SHA-256 hash of the one before it; php tests/verify-audit.php checks the chain.',
+            'tip' => 'A clean run reads "chain intact (ids 1–N)". The console verifier — php tests/verify-audit.php — does the same walk and also records the anchor outside the database.',
+        ],
+
+        'health' => [
+            'title'   => 'System self-check',
+            'summary' => 'Whether this installation can be trusted right now: PHP and schema versions, the audit hash chain and its anchor, storage permissions and how old the newest database dump is.',
+            'steps'   => [
+                'Read the verdict first: red means a check failed, orange means something needs attention soon.',
+                'A broken chain or anchor means somebody changed the trail outside the application — export the trail and keep the anchor file before anything else.',
+                'Under "Backups", an old or missing dump means the restore drill cannot pass: run php tools/backup.php on the server.',
+                'Paths, versions and the demo-account setting are here because this page is administrator-only.',
+            ],
+            'tip' => 'Every check is a read — opening this page never changes the installation, so it is safe to run in front of an auditor.',
         ],
 
         'users' => [

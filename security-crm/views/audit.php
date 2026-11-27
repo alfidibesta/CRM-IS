@@ -13,6 +13,15 @@ $ents   = audit_entities();
 $narrow = $f['q'] !== '' || $f['action'] !== '' || $f['entity'] !== ''
     || $f['actor'] !== '' || $f['from'] !== '' || $f['to'] !== '';
 
+// "Verify integrity" walks the whole chain on demand, so the reader who needs
+// the proof (an auditor, usually) does not need a shell. Read-only on purpose:
+// it writes neither a row nor an audit event, so the trail it checks is exactly
+// the trail that was there before the click.
+$verify = null;
+if (isset($_GET['verify'])) {
+    $verify = audit_verify($pdo) + ['anchor' => audit_anchor_check($pdo)];
+}
+
 function audit_url(array $over): string
 {
     $base = [
@@ -64,6 +73,77 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
     <p class="stat__hint">role refused by a permission · 7d</p>
   </article>
 </section>
+
+<div class="toolbar">
+  <a class="btn btn--primary" href="?page=audit&amp;verify=1">Verify integrity</a>
+  <span class="muted">Re-walks every entry, recomputes its hash and compares the newest one with the anchor file. The check writes nothing.</span>
+</div>
+
+<?php if ($verify !== null): ?>
+  <?php
+  $chain    = $verify;
+  $broken   = $chain['broken'] ?? null;
+  $anch     = $chain['anchor'];
+  $chainOk  = (bool) $chain['ok'];
+  $anchOk   = (bool) ($anch['ok'] ?? true);
+  $pass     = $chainOk && $anchOk;
+  $reasons  = [
+      'missing' => 'the entry carries no hash — it was written outside the application',
+      'link'    => 'the entry no longer links to the entry before it',
+      'content' => 'the entry no longer matches the hash recorded for it',
+  ];
+  $anchorWhy = [
+      'deleted'   => 'the entry recorded at the anchor is gone — the newest entries were deleted, or the database was restored from an older copy',
+      'rewritten' => 'the entry recorded at the anchor no longer has the hash written outside the database',
+      'truncated' => 'the trail is shorter than the anchor',
+  ];
+  $anchoredAt = strtotime((string) ($anch['anchor']['at'] ?? ''));
+  ?>
+  <section class="card" role="status">
+    <div class="card__head">
+      <h2>Integrity check</h2>
+      <?= badge($pass ? 'Chain intact' : 'Attention needed', $pass ? 'green' : 'red') ?>
+    </div>
+
+    <?php if ($chain['checked'] === 0): ?>
+      <p class="muted">The trail is empty — there is nothing to check yet.</p>
+    <?php elseif ($chainOk): ?>
+      <p>
+        <strong><?= number_format($chain['checked']) ?> entries checked</strong>
+        (ids <?= (int) $chain['head'] ?>–<?= (int) $chain['newest'] ?>).
+        Every hash matches its stored row and each entry links to the one before it.
+      </p>
+    <?php else: ?>
+      <p>
+        <strong>First broken link at entry #<?= (int) ($broken['id'] ?? 0) ?></strong> —
+        <?= e($reasons[$broken['reason'] ?? ''] ?? 'the chain is in an unexpected state') ?>.
+      </p>
+      <p class="muted">
+        Checked <?= number_format($chain['checked']) ?> entries up to that point; the newest id is
+        <?= (int) $chain['newest'] ?>. Export the trail and keep the anchor file before changing anything.
+      </p>
+    <?php endif; ?>
+
+    <?php if ($anch['reason'] === 'none'): ?>
+      <p class="muted">
+        Anchor: none recorded yet, so a deletion of the <em>newest</em> entries cannot be ruled out
+        (nothing follows them, so no link breaks). Run <span class="mono">php tests/verify-audit.php</span>
+        once on the server to anchor the head outside the database.
+      </p>
+    <?php elseif ($anchOk): ?>
+      <p class="muted">
+        Anchor: matches entry #<?= (int) $anch['id'] ?><?= $anchoredAt ? ' recorded on ' . e(date('d M Y H:i', $anchoredAt)) : '' ?> —
+        the newest entries are still the ones recorded outside the database.
+      </p>
+    <?php else: ?>
+      <p class="muted">
+        Anchor: BROKEN at entry #<?= (int) ($anch['id'] ?? 0) ?> —
+        <?= e($anchorWhy[$anch['reason'] ?? ''] ?? 'unexpected anchor state') ?>.
+        File: <span class="mono"><?= e((string) ($anch['anchor']['file'] ?? audit_anchor_file())) ?></span>
+      </p>
+    <?php endif; ?>
+  </section>
+<?php endif; ?>
 
 <div class="toolbar toolbar--filters">
   <details class="filters filters--pop">
@@ -199,8 +279,10 @@ $exportUrl = '?page=audit&amp;export=csv' . ($narrow ? '&amp;' . e(http_build_qu
   <div class="more__body">
     <p class="footnote">
       Entries are written by the application and never edited: no screen updates or deletes them.
-      Each entry is also chained to the one before it by a SHA-256 hash — <span class="mono">php tests/verify-audit.php</span>
-      re-reads the table and names the first entry that no longer matches.
+      Each entry is also chained to the one before it by a SHA-256 hash.
+      <strong>Verify integrity</strong> above re-reads the whole table in the browser and names the first entry that
+      no longer matches, and compares the newest entry with the anchor kept outside the database;
+      <span class="mono">php tests/verify-audit.php</span> does the same from a console and also records a new anchor.
       Coverage — sign-in, sign-out, refused actions, issues, status changes, report forms, notes, people,
       evidence, tasks, templates, exceptions, categories, users and exports. Export the filtered view as CSV
       for an audit pack; retention follows your database backup policy.

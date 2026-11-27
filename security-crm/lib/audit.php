@@ -73,6 +73,7 @@ function audit_actions(): array
         'user.delete'  => ['User deleted', 'red'],
         'audit.export' => ['Trail exported', 'orange'],
         'logs.view'    => ['System log read', 'neutral'],
+        'health.view'  => ['Self-check read', 'neutral'],
     ];
 
     return $actions;

@@ -371,7 +371,8 @@ and now show their raw action key (for example `cctv.prune`).
 | `?page=exceptions` | **EDLP exception register** — USB, websites, cameras, cloud apps…: adjustable categories, validity period with expiring/expired state, detail, justification, compensating control, category manager |
 | `?page=ot` | **OT vulnerability register** — daily FA monitoring: business location, vulnerability type (with *Other*), importance, report confirmation date, target facilities/systems, remarks, current status, recent contact, PC risk management, risk control, owner and due date |
 | `?page=users` | Accounts + the role/permission **authority matrix** (admin only) |
-| `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters and a CSV export |
+| `?page=audit` | **Audit trail** — every recorded event (sign-ins, refusals, record changes, downloads) with actor, role, record, detail and address; filters, a **Verify integrity** button that re-walks the hash chain and an in-page anchor check, and a CSV export |
+| `?page=health` | **System self-check** (administrator) — verdict plus PHP version, schema state, hash chain and anchor, storage permissions, how old the newest database dump is, and the configuration that changes security behaviour |
 | `?page=logs` | **System log** (administrator) — the tail of `logs/app.log`: PHP errors and uncaught exceptions the browser never sees |
 
 Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
@@ -397,6 +398,7 @@ Downloads: `?page=issue_doc&id=N` (issue report), `?page=doc&id=N&fill[KEY]=…`
 | Approve a renewal / verify a compensating control | ✓ | ✓ | — | — |
 | Manage exception categories | ✓ | ✓ | — | — |
 | Read the system log | ✓ | — | — | — |
+| Run the system self-check | ✓ | — | — | — |
 | Read persons involved (contact, statements) | ✓ | ✓ | ✓ | — |
 | Download evidence files | ✓ | ✓ | ✓ | — |
 | Export the issue report (`.docx`) | ✓ | ✓ | ✓ | ✓ (without persons or evidence) |
@@ -629,6 +631,12 @@ php tests/verify-audit.php
 # audit trail: FIRST BROKEN LINK at entry #60 — the entry no
 #   longer matches the hash recorded for it                   exit 1
 ```
+
+**Verify integrity** on the trail page runs the same walk in the browser, so the reader who needs the
+proof does not need a shell: it answers `chain intact (ids 1–N)`, or names the first broken entry and
+why, and compares the newest entry with the anchor file. It writes nothing — not a row, not an audit
+event — so the trail an auditor checks is byte-for-byte the trail that was there before the click.
+Anchoring stays with the console verifier, which is the one you put in cron.
 
 It walks `audit_log` in id order, recomputes each hash and follows each link, stopping at the first
 entry that does not match: a changed field reads as *no longer matches the hash*, a deleted row as

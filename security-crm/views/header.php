@@ -15,6 +15,7 @@ $nav = [
     ['exceptions', 'EDLP Exceptions', 'i-exceptions', 'page.exceptions'],
     ['ot',        'OT Vulnerabilities', 'i-ot', 'page.ot'],
     ['audit',     'Audit trail',  'i-audit', 'page.audit'],
+    ['health',    'System check', 'i-health', 'page.health'],
 ];
 
 $categories = ['Physical Security' => 'i-cat-physical', 'IT Security' => 'i-cat-it', 'Strain Security' => 'i-cat-strain'];
@@ -54,6 +55,7 @@ $categories = ['Physical Security' => 'i-cat-physical', 'IT Security' => 'i-cat-
   <symbol id="i-ot" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/><path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21"/></symbol>
   <symbol id="i-audit" viewBox="0 0 24 24"><path d="M4 6h9M4 11h9M4 16h5"/><path d="m15 16 2.2 2.2 4-4"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.2" r="3.2"/><path d="M3.6 20c0-3 2.4-5.1 5.4-5.1s5.4 2.1 5.4 5.1"/><path d="M16.2 5.6a3.2 3.2 0 0 1 0 5.6"/><path d="M18 15c2 .7 3.4 2.4 3.4 5"/></symbol>
+  <symbol id="i-health" viewBox="0 0 24 24"><path d="M12 3.2 19.4 6v6.1c0 4.3-3 7.4-7.4 8.7C7.6 19.5 4.6 16.4 4.6 12.1V6Z"/><path d="m8.6 12 2.4 2.4 4.4-4.6"/></symbol>
   <symbol id="i-log" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="m7.5 10 2.5 2.5-2.5 2.5M13 15h4"/></symbol>
   <symbol id="i-cat-physical" viewBox="0 0 24 24"><path d="M5 20V8M12 20V8M19 20V8M3 12h18M3 16h18"/></symbol>
   <symbol id="i-cat-it" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></symbol>
